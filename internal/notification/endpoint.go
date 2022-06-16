@@ -15,23 +15,26 @@ type Endpoint struct {
 	svc InternalManager
 }
 
-type Notification struct {
-	notificationTxt string
-	destination     string
+func NewEndpoint(svc InternalManager) *Endpoint {
+	return &Endpoint{
+		svc: svc,
+	}
 }
 
 func (e *Endpoint) CreateNotification(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 	reader := r.Body
 	length := r.ContentLength
-	b := make([]byte, 0, length)
+	b := make([]byte, length)
 	_, err := io.ReadFull(reader, b)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
+		return
 	}
 	n := &Notification{}
 	err = json.Unmarshal(b, n)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
+		return
 	}
 	err = e.svc.PushNotificationInternal(n)
 	if err != nil {

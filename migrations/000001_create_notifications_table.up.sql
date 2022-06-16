@@ -1,6 +1,6 @@
 CREATE TABLE notifications (
                                       server_uuid uuid NOT NULL,
-                                      txt varchar NULL,
+                                      txt varchar NOT NULL,
                                       "status" int2 NOT NULL,
                                       "destination" int2 NOT NULL,
                                       server_timestamp timestamp NOT NULL,

@@ -1,12 +1,20 @@
 package notification
 
-import "fmt"
+import (
+	"fmt"
+	"github.com/rs/zerolog/log"
+)
 
 type SlackNotificator struct {
 	// business stuff
 }
 
-func (sn *SlackNotificator) Send(notification ServerNotification) {
+func (sn *SlackNotificator) Send(txt string) error {
 	// business logic regarding slack notifications
-	fmt.Println("Sent an Slack Notification")
+	log.Info().Msg(fmt.Sprintf("Sent an Slack Notification with txt %s", txt))
+	return nil
+}
+
+func (sn *SlackNotificator) Destination() Destination {
+	return Slack
 }

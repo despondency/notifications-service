@@ -1,12 +1,20 @@
 package notification
 
-import "fmt"
+import (
+	"fmt"
+	"github.com/rs/zerolog/log"
+)
 
 type EmailNotificator struct {
 	// business stuff
 }
 
-func (en *EmailNotificator) Send(notification ServerNotification) {
+func (en *EmailNotificator) Send(txt string) error {
 	// business logic regarding email notifications
-	fmt.Println("Sent an Email Notification")
+	log.Info().Msg(fmt.Sprintf("Sent an Email Notification with txt %s", txt))
+	return nil
+}
+
+func (sn *EmailNotificator) Destination() Destination {
+	return Email
 }

@@ -3,6 +3,7 @@ package notification
 import (
 	"fmt"
 	"github.com/google/uuid"
+	"time"
 )
 
 type Destination int8
@@ -22,7 +23,7 @@ const (
 	PROCESSED
 )
 
-func toServerNotificationDestination(destination string) (int, error) {
+func toServerNotificationDestination(destination string) (Destination, error) {
 	switch destination {
 	case "SMS":
 		return 0, nil
@@ -36,8 +37,17 @@ func toServerNotificationDestination(destination string) (int, error) {
 }
 
 type ServerNotification struct {
-	serverUUID      uuid.UUID
-	serverTimestamp int64
-	notificationTxt string
-	dest            Destination
+	ServerUUID              uuid.UUID   `json:"server_uuid"`
+	ServerReceivedTimestamp time.Time   `json:"server_received_timestamp"`
+	NotificationTxt         string      `json:"txt"`
+	Dest                    Destination `json:"destination"`
+}
+
+type OutstandingNotification struct {
+	ServerUUID uuid.UUID `json:"server_uuid"`
+}
+
+type Notification struct {
+	NotificationTxt string `json:"txt"`
+	Destination     string `json:"destination"`
 }
