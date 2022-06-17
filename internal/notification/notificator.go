@@ -23,7 +23,6 @@ func (dn *DelegatingNotificator) DelegateNotification(notification *DelegatingNo
 	for _, n := range dn.Notificators {
 		if n.Destination() == notification.dest {
 			err := n.Send(notification.txt)
-			//	log.Debug().Msg(fmt.Sprintf("successfully sent notification with uuid %s, to %d", notification.serverUUID, notification.dest))
 			if err != nil {
 				return err
 			}

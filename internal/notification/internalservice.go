@@ -24,16 +24,23 @@ type InternalService struct {
 	stopped                          *atomic.Bool
 }
 
-func NewInternalService(kp *messaging.KafkaProducer, outstandingNotificationsProducer *messaging.KafkaProducer, txCreator *storage.WrappedTxCreator, persistence storage.Persistence) *InternalService {
+const (
+	receivedNotificationsMax = 1000
+)
+
+func NewInternalService(
+	bootstrapServers, receivedNotificationsGroupID, resetOffset, receivedNotificationsTopic, enableAutoCommit string,
+	kp *messaging.KafkaProducer, outstandingNotificationsProducer *messaging.KafkaProducer,
+	txCreator *storage.WrappedTxCreator, persistence storage.Persistence) *InternalService {
 	c, err := kafka.NewConsumer(&kafka.ConfigMap{
-		"bootstrap.servers":  "localhost:9092",
-		"group.id":           "received-notifications-group-id",
-		"auto.offset.reset":  "earliest",
-		"enable.auto.commit": "false"})
+		"bootstrap.servers":  bootstrapServers,
+		"group.id":           receivedNotificationsGroupID,
+		"auto.offset.reset":  resetOffset,
+		"enable.auto.commit": enableAutoCommit})
 	if err != nil {
 		panic(err)
 	}
-	err = c.Subscribe("received-notifications", nil)
+	err = c.Subscribe(receivedNotificationsTopic, nil)
 
 	is := &InternalService{
 		kp:                               kp,
@@ -50,7 +57,7 @@ func NewInternalService(kp *messaging.KafkaProducer, outstandingNotificationsPro
 func (s *InternalService) PushNotificationInternal(n *Notification) error {
 	dest, err := toServerNotificationDestination(n.Destination)
 	if err != nil {
-		log.Err(err).Msg(fmt.Sprintf("destination is %d", dest))
+		log.Err(err).Msg(fmt.Sprintf("destination conversion to server notification destination failed, original destination is %s", n.Destination))
 	}
 	serverNotification := &ServerNotification{
 		ServerUUID:              uuid.New(),
@@ -71,12 +78,18 @@ func (s *InternalService) PushNotificationInternal(n *Notification) error {
 
 func (s *InternalService) Stop() {
 	s.stopped.Store(true)
-	s.consumer.Commit()
-	s.consumer.Close()
+	_, err := s.consumer.Commit()
+	if err != nil {
+		log.Err(err).Msg("could not commit consumer while stopping in internal service")
+	}
+	err = s.consumer.Close()
+	if err != nil {
+		log.Err(err).Msg("could not close consumer while stopping in internal service")
+	}
 }
 
 func (s *InternalService) consumeNotificationInternal() {
-	maxReq := make(chan struct{}, 1000)
+	maxReq := make(chan struct{}, receivedNotificationsMax)
 	go func() {
 		for s.stopped.Load() == false {
 			ev := s.consumer.Poll(0)
@@ -88,47 +101,63 @@ func (s *InternalService) consumeNotificationInternal() {
 					defer func() {
 						<-maxReq
 					}()
-					var serverNotification ServerNotification
-					err := json.Unmarshal(e.Value, &serverNotification)
+					serverNotification, err := s.insertNewServerNotification(ctx, e)
 					if err != nil {
-						log.Err(err).Msg("cannot consume internal notification")
-					}
-					tx, err := s.txCreator.NewTx(ctx, pgx.TxOptions{})
-					if err != nil {
-						log.Err(err).Msg("could not create tx")
+						log.Err(err).Msg("could not insert new server notification")
 						return
 					}
-					err = s.persistence.InsertOnConflictNothing(context.Background(), ToUnprocessedNotification(&serverNotification), tx)
+					err = s.pushOutstandingNotification(serverNotification)
 					if err != nil {
-						log.Err(err).Msg("could not upsert notification")
-						return
-					}
-					err = tx.Commit(ctx)
-					if err != nil {
-						log.Err(err).Msg("could not commit tx")
-						return
-					}
-					on := OutstandingNotification{
-						ServerUUID: serverNotification.ServerUUID,
-					}
-					b, err := json.Marshal(on)
-					if err != nil {
-						log.Err(err).Msg("could not marshal outstanding notification")
-					}
-					err = s.outstandingNotificationsProducer.Produce(b)
-					if err != nil {
-						log.Err(err).Msg("failed to produce outstanding notification")
+						log.Err(err).Msg("could not push outstanding notification")
 						return
 					}
 					_, err = s.consumer.CommitMessage(e)
 				}()
 			case kafka.Error:
-				// maybe fatal here?
+				//maybe fatal here?
 			default:
-				//	fmt.Printf("Ignored %v\n", e)
+				//fmt.Printf("Ignored %v\n", e)
 			}
 		}
 	}()
+}
+
+func (s *InternalService) pushOutstandingNotification(serverNotification *ServerNotification) error {
+	on := OutstandingNotification{
+		ServerUUID: serverNotification.ServerUUID,
+	}
+	b, err := json.Marshal(on)
+	if err != nil {
+		return err
+	}
+	err = s.outstandingNotificationsProducer.Produce(b)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (s *InternalService) insertNewServerNotification(ctx context.Context, e *kafka.Message) (*ServerNotification, error) {
+	var serverNotification *ServerNotification
+	err := json.Unmarshal(e.Value, &serverNotification)
+	if err != nil {
+		return nil, err
+	}
+	tx, err := s.txCreator.NewTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		err = tx.Commit(ctx)
+		if err != nil {
+			log.Err(err).Msg("error committing server notification")
+		}
+	}()
+	err = s.persistence.InsertOnConflictNothing(context.Background(), ToUnprocessedNotification(serverNotification), tx)
+	if err != nil {
+		return nil, err
+	}
+	return serverNotification, err
 }
 
 func ToUnprocessedNotification(n *ServerNotification) *storage.Notification {

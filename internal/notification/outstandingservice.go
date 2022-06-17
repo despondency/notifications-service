@@ -14,25 +14,31 @@ import (
 
 type OutstandingService struct {
 	notificator *DelegatingNotificator
-	kc          *kafka.Consumer
+	consumer    *kafka.Consumer
 	txCreator   *storage.WrappedTxCreator
 	persistence storage.Persistence
 	stopped     *atomic.Bool
 }
 
-func NewOutstandingService(txCreator *storage.WrappedTxCreator, persistence storage.Persistence,
+const (
+	outstandingNotificationsMax = 1000
+)
+
+func NewOutstandingService(
+	bootstrapServers, outstandingGroupID, autoResetOffset, enableAutoCommit, outstandingNotificationsTopic string,
+	txCreator *storage.WrappedTxCreator, persistence storage.Persistence,
 	notificator *DelegatingNotificator) *OutstandingService {
-	c, err := kafka.NewConsumer(&kafka.ConfigMap{
-		"bootstrap.servers":  "localhost:9092",
-		"group.id":           "outstanding-notifications-group-id",
-		"auto.offset.reset":  "earliest",
-		"enable.auto.commit": "false"})
+	consumer, err := kafka.NewConsumer(&kafka.ConfigMap{
+		"bootstrap.servers":  bootstrapServers,
+		"group.id":           outstandingGroupID,
+		"auto.offset.reset":  autoResetOffset,
+		"enable.auto.commit": enableAutoCommit})
 	if err != nil {
 		panic(err)
 	}
-	err = c.Subscribe("outstanding-notifications", nil)
+	err = consumer.Subscribe(outstandingNotificationsTopic, nil)
 	ous := &OutstandingService{
-		kc:          c,
+		consumer:    consumer,
 		txCreator:   txCreator,
 		persistence: persistence,
 		notificator: notificator,
@@ -44,15 +50,20 @@ func NewOutstandingService(txCreator *storage.WrappedTxCreator, persistence stor
 
 func (ous *OutstandingService) Stop() {
 	ous.stopped.Store(true)
-	ous.kc.Commit()
-	ous.kc.Close()
+	_, err := ous.consumer.Commit()
+	if err != nil {
+		log.Err(err).Msg("could not commit consumer while stopping in outstanding service")
+	}
+	err = ous.consumer.Close()
+	if err != nil {
+		log.Err(err).Msg("could not close consumer while stopping in outstanding service")
+	}
 }
-
 func (ous *OutstandingService) consumeNotificationOutstanding() {
-	maxReq := make(chan struct{}, 1000)
+	maxReq := make(chan struct{}, outstandingNotificationsMax)
 	go func() {
 		for ous.stopped.Load() == false {
-			ev := ous.kc.Poll(0)
+			ev := ous.consumer.Poll(0)
 			switch e := ev.(type) {
 			case *kafka.Message:
 				maxReq <- struct{}{}
@@ -65,6 +76,7 @@ func (ous *OutstandingService) consumeNotificationOutstanding() {
 					err := json.Unmarshal(e.Value, &outstandingNotification)
 					if err != nil {
 						log.Err(err).Msg("cannot consume internal notification")
+						return
 					}
 					tx, err := ous.txCreator.NewTx(ctx, pgx.TxOptions{})
 					if err != nil {
@@ -73,10 +85,22 @@ func (ous *OutstandingService) consumeNotificationOutstanding() {
 					} else {
 						err := ous.handleMsg(err, ctx, outstandingNotification, tx)
 						if err != nil {
-							tx.Rollback(ctx)
+							log.Err(err).Msg("error handling message for outstanding notification")
+							errRollback := tx.Rollback(ctx)
+							if errRollback != nil {
+								log.Err(errRollback).Msg("could not rollback outstanding notification tx")
+							}
 						} else {
-							_, err = ous.kc.CommitMessage(e)
-							tx.Commit(ctx)
+							_, errCommitMsg := ous.consumer.CommitMessage(e)
+							if errCommitMsg != nil {
+								log.Err(errCommitMsg).Msg("could not commit outstanding notification msg")
+								return
+							}
+							errCommit := tx.Commit(ctx)
+							if errCommit != nil {
+								log.Err(errCommit).Msg("could not commit outstanding notification tx")
+								return
+							}
 						}
 					}
 				}()
@@ -92,7 +116,6 @@ func (ous *OutstandingService) consumeNotificationOutstanding() {
 func (ous *OutstandingService) handleMsg(err error, ctx context.Context, outstandingNotification OutstandingNotification, tx *storage.WrappedTx) error {
 	sv, err := ous.persistence.GetForUpdate(ctx, outstandingNotification.ServerUUID, tx)
 	if err != nil {
-		log.Err(err).Msg(fmt.Sprintf("could not get for update server uuid %s", outstandingNotification.ServerUUID))
 		return err
 	}
 	if sv.Status.Int == int16(NOT_PROCESSED) {
@@ -102,7 +125,6 @@ func (ous *OutstandingService) handleMsg(err error, ctx context.Context, outstan
 			dest:       Destination(sv.Dest.Int),
 		})
 		if errSend != nil {
-			log.Err(errSend).Msg(fmt.Sprintf("could not send notification for server uuid %s", outstandingNotification.ServerUUID))
 			return err
 		} else {
 			err = ous.persistence.UpdateStatus(ctx, outstandingNotification.ServerUUID, pgtype.Int2{
@@ -110,20 +132,12 @@ func (ous *OutstandingService) handleMsg(err error, ctx context.Context, outstan
 				Status: pgtype.Present,
 			}, tx)
 			if err != nil {
-				log.Err(err).Msg(fmt.Sprintf("could not update status for uuid %s", outstandingNotification.ServerUUID))
-				return err
-			}
-			if err != nil {
-				log.Err(err).Msg(fmt.Sprintf("could not commit tx successful notification send for %s", outstandingNotification.ServerUUID))
 				return err
 			}
 		}
 	} else {
 		// skip since its already processed
-		log.Info().Msg(fmt.Sprintf("skipping already processed notification %s", sv.ServerUUID))
-		if err != nil {
-			log.Err(err).Msg(fmt.Sprintf("could not commit tx successful notification send for %s", outstandingNotification.ServerUUID))
-		}
+		log.Debug().Msg(fmt.Sprintf("skipping already processed notification %s", sv.ServerUUID))
 	}
 	return err
 }

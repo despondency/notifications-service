@@ -59,10 +59,6 @@ func (kp *KafkaProducer) Produce(payload []byte) error {
 	if m.TopicPartition.Error != nil {
 		log.Err(m.TopicPartition.Error).Msg("Delivery failed")
 		return m.TopicPartition.Error
-	} else {
-		//log.Info().Msg(fmt.Sprintf(
-		//	"Delivered message to topic %s [%d] at offset %v\n",
-		//	*m.TopicPartition.Topic, m.TopicPartition.Partition, m.TopicPartition.Offset))
 	}
 	return nil
 }

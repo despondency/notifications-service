@@ -2,7 +2,6 @@ package storage
 
 import (
 	"context"
-	"fmt"
 	"github.com/google/uuid"
 	"github.com/jackc/pgtype"
 	"github.com/jackc/pgx/v4/pgxpool"
@@ -37,7 +36,7 @@ func (crdbp *CRDBPersistence) InsertOnConflictNothing(ctx context.Context, notif
 }
 
 func (crdbp *CRDBPersistence) UpdateStatus(ctx context.Context, serverUUID uuid.UUID, status pgtype.Int2, tx *WrappedTx) error {
-	cmd, errExec := (*tx.Tx).Exec(ctx,
+	_, errExec := (*tx.Tx).Exec(ctx,
 		"UPDATE notifications SET status=$1, last_updated=$2 "+
 			"WHERE server_uuid = $3",
 		status,
@@ -49,9 +48,6 @@ func (crdbp *CRDBPersistence) UpdateStatus(ctx context.Context, serverUUID uuid.
 	)
 	if errExec != nil {
 		return errExec
-	}
-	if cmd.RowsAffected() != 1 {
-		return fmt.Errorf("expected to affect 1 row, but affected %d", cmd.RowsAffected())
 	}
 	return nil
 }

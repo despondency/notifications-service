@@ -51,12 +51,13 @@ func main() {
 	runMigrations(cfg.DBConnectString)
 
 	connPool, err := pgxpool.Connect(ctx, cfg.DBConnectString)
+	if err != nil {
+		log.Panic().Err(err).Msg("could not create pooled connection to DB")
+	}
+
 	connPool.Config().MaxConns = 50
 	connPool.Config().MaxConnLifetime = time.Second * 60
 	connPool.Config().MinConns = 0
-	if err != nil {
-		log.Panic().Err(err)
-	}
 
 	pers := storage.NewCRDBPersistence(connPool)
 
@@ -74,13 +75,17 @@ func main() {
 		log.Panic().Err(err).Msg("cannot create kafka internal consumer")
 	}
 
-	is := notification.NewInternalService(internalKafkaProducer, outstandingKafkaProducer, txCreator, pers)
+	is := notification.NewInternalService(cfg.BootstrapServers, cfg.InternalGroupID, "earliest",
+		cfg.InternalTopic, "false",
+		internalKafkaProducer, outstandingKafkaProducer, txCreator, pers)
 
 	notifiers := &notification.DelegatingNotificator{
 		Notificators: []notification.Notificator{&notification.SMSNotificator{}, &notification.EmailNotificator{}, &notification.SlackNotificator{}},
 	}
 
-	ous := notification.NewOutstandingService(txCreator, pers, notifiers)
+	ous := notification.NewOutstandingService(cfg.BootstrapServers, cfg.OutstandingGroupID, "earliest",
+		"false", cfg.OutstandingTopic,
+		txCreator, pers, notifiers)
 
 	zerolog.TimeFieldFormat = zerolog.TimeFormatUnix
 
