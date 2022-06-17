@@ -20,7 +20,7 @@ func NewCRDBPersistence(pool *pgxpool.Pool) *CRDBPersistence {
 }
 
 func (crdbp *CRDBPersistence) InsertOnConflictNothing(ctx context.Context, notification *Notification, tx *WrappedTx) error {
-	cmd, errExec := (*tx.Tx).Exec(ctx,
+	_, errExec := (*tx.Tx).Exec(ctx,
 		"INSERT into notifications(server_uuid, txt, status, destination, server_timestamp, last_updated) "+
 			"VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT(server_uuid) DO NOTHING",
 		notification.ServerUUID,
@@ -32,9 +32,6 @@ func (crdbp *CRDBPersistence) InsertOnConflictNothing(ctx context.Context, notif
 	)
 	if errExec != nil {
 		return errExec
-	}
-	if cmd.RowsAffected() != 1 {
-		return fmt.Errorf("expected to affect 1 row, but affected %d", cmd.RowsAffected())
 	}
 	return nil
 }

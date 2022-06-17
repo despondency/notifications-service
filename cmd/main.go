@@ -15,7 +15,10 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"net/http"
+	"os"
+	"os/signal"
 	"strings"
+	"time"
 )
 
 type Config struct {
@@ -48,6 +51,9 @@ func main() {
 	runMigrations(cfg.DBConnectString)
 
 	connPool, err := pgxpool.Connect(ctx, cfg.DBConnectString)
+	connPool.Config().MaxConns = 50
+	connPool.Config().MaxConnLifetime = time.Second * 60
+	connPool.Config().MinConns = 0
 	if err != nil {
 		log.Panic().Err(err)
 	}
@@ -62,31 +68,19 @@ func main() {
 		log.Panic().Err(err).Msg("cannot create kafka internal producer")
 	}
 
-	internalKafkaConsumer, err :=
-		messaging.NewKafkaConsumer(cfg.BootstrapServers, cfg.InternalGroupID, cfg.InternalTopic, "earliest")
-	if err != nil {
-		log.Panic().Err(err).Msg("cannot create kafka internal consumer")
-	}
-
 	outstandingKafkaProducer, err :=
 		messaging.NewKafkaProducer(cfg.BootstrapServers, cfg.OutstandingTopic, "notifications-service", cfg.Acks)
 	if err != nil {
 		log.Panic().Err(err).Msg("cannot create kafka internal consumer")
 	}
 
-	is := notification.NewInternalService(internalKafkaProducer, internalKafkaConsumer, outstandingKafkaProducer, txCreator, pers)
-
-	outstandingKafkaConsumer, err :=
-		messaging.NewKafkaConsumer(cfg.BootstrapServers, cfg.OutstandingGroupID, cfg.OutstandingTopic, "latest")
-	if err != nil {
-		log.Panic().Err(err).Msg("cannot create kafka internal consumer")
-	}
+	is := notification.NewInternalService(internalKafkaProducer, outstandingKafkaProducer, txCreator, pers)
 
 	notifiers := &notification.DelegatingNotificator{
 		Notificators: []notification.Notificator{&notification.SMSNotificator{}, &notification.EmailNotificator{}, &notification.SlackNotificator{}},
 	}
 
-	_ = notification.NewOutstandingService(outstandingKafkaConsumer, txCreator, pers, notifiers)
+	ous := notification.NewOutstandingService(txCreator, pers, notifiers)
 
 	zerolog.TimeFieldFormat = zerolog.TimeFormatUnix
 
@@ -94,8 +88,35 @@ func main() {
 	endpoint := notification.NewEndpoint(is)
 	router.POST("/notification", endpoint.CreateNotification)
 
-	err = http.ListenAndServe(":8091", router)
-	log.Fatal().Err(err)
+	srv := http.Server{
+		Addr:    ":8091",
+		Handler: router,
+	}
+
+	idleConnsClosed := make(chan struct{})
+	go func() {
+		sigint := make(chan os.Signal, 1)
+		signal.Notify(sigint, os.Interrupt)
+		<-sigint
+
+		// We received an interrupt signal, shut down.
+		if err := srv.Shutdown(context.Background()); err != nil {
+			// Error from closing listeners, or context timeout:
+			log.Printf("HTTP server Shutdown: %v", err)
+		}
+		is.Stop()
+		ous.Stop()
+		internalKafkaProducer.Stop()
+		connPool.Close()
+		close(idleConnsClosed)
+	}()
+
+	if err := srv.ListenAndServe(); err != http.ErrServerClosed {
+		// Error starting or closing listener:
+		log.Fatal().Err(err).Msg(fmt.Sprintf("HTTP server ListenAndServe"))
+	}
+
+	<-idleConnsClosed
 }
 
 func runMigrations(dbConnectString string) {

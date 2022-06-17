@@ -5,11 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/confluentinc/confluent-kafka-go/kafka"
-	"github.com/despondency/notifications-service/internal/messaging"
 	"github.com/despondency/notifications-service/internal/storage"
 	"github.com/jackc/pgtype"
 	"github.com/jackc/pgx/v4"
 	"github.com/rs/zerolog/log"
+	"go.uber.org/atomic"
 )
 
 type OutstandingService struct {
@@ -17,9 +17,10 @@ type OutstandingService struct {
 	kc          *kafka.Consumer
 	txCreator   *storage.WrappedTxCreator
 	persistence storage.Persistence
+	stopped     *atomic.Bool
 }
 
-func NewOutstandingService(kc *messaging.KafkaConsumer, txCreator *storage.WrappedTxCreator, persistence storage.Persistence,
+func NewOutstandingService(txCreator *storage.WrappedTxCreator, persistence storage.Persistence,
 	notificator *DelegatingNotificator) *OutstandingService {
 	c, err := kafka.NewConsumer(&kafka.ConfigMap{
 		"bootstrap.servers":  "localhost:9092",
@@ -35,81 +36,94 @@ func NewOutstandingService(kc *messaging.KafkaConsumer, txCreator *storage.Wrapp
 		txCreator:   txCreator,
 		persistence: persistence,
 		notificator: notificator,
+		stopped:     atomic.NewBool(false),
 	}
 	ous.consumeNotificationOutstanding()
 	return ous
 }
 
+func (ous *OutstandingService) Stop() {
+	ous.stopped.Store(true)
+	ous.kc.Commit()
+	ous.kc.Close()
+}
+
 func (ous *OutstandingService) consumeNotificationOutstanding() {
-	ctx := context.Background()
+	maxReq := make(chan struct{}, 1000)
 	go func() {
-		for {
+		for ous.stopped.Load() == false {
 			ev := ous.kc.Poll(0)
 			switch e := ev.(type) {
 			case *kafka.Message:
-				var outstandingNotification OutstandingNotification
-				err := json.Unmarshal(e.Value, &outstandingNotification)
-				if err != nil {
-					log.Err(err).Msg("cannot consume internal notification")
-				}
-				log.Info().Msg(fmt.Sprintf("%s event", outstandingNotification))
-				tx, err := ous.txCreator.NewTx(ctx, pgx.TxOptions{})
-				if err != nil {
-					log.Err(err).Msg("could not create tx")
-				}
-				sv, err := ous.persistence.GetForUpdate(ctx, outstandingNotification.ServerUUID, tx)
-				if err != nil {
-					log.Err(err).Msg(fmt.Sprintf("could not get for update server uuid %s", outstandingNotification.ServerUUID))
-				}
-				// simulate error
-				if true {
-					err := ous.kc.Seek(e.TopicPartition, 0)
+				maxReq <- struct{}{}
+				go func() {
+					ctx := context.Background()
+					defer func() {
+						<-maxReq
+					}()
+					var outstandingNotification OutstandingNotification
+					err := json.Unmarshal(e.Value, &outstandingNotification)
 					if err != nil {
-						panic(err)
+						log.Err(err).Msg("cannot consume internal notification")
 					}
-					err = tx.Commit(ctx)
+					tx, err := ous.txCreator.NewTx(ctx, pgx.TxOptions{})
 					if err != nil {
-						log.Err(err).Msg(fmt.Sprintf("could not commit tx for server uuid %s", outstandingNotification.ServerUUID))
-					}
-					continue
-				} else {
-					_, err := ous.kc.Commit()
-					if err != nil {
-						log.Err(err).Msg("cannot commit kafka")
-					}
-				}
-				if sv.Status.Int == int16(NOT_PROCESSED) {
-					err = ous.notificator.DelegateNotification(&DelegatingNotification{
-						serverUUID: sv.ServerUUID,
-						txt:        sv.Txt,
-						dest:       Destination(sv.Dest.Int),
-					})
-					if err != nil {
-						log.Err(err).Msg(fmt.Sprintf("could not send notification for server uuid %s", outstandingNotification.ServerUUID))
-						// commit
-						err = tx.Commit(ctx)
-						if err != nil {
-							log.Err(err).Msg(fmt.Sprintf("could not commit tx for server uuid %s", outstandingNotification.ServerUUID))
-						}
+						log.Err(err).Msg("could not create tx")
+						return
 					} else {
-						err = ous.persistence.UpdateStatus(ctx, outstandingNotification.ServerUUID, pgtype.Int2{
-							Int:    int16(PROCESSED),
-							Status: pgtype.Present,
-						}, tx)
+						err := ous.handleMsg(err, ctx, outstandingNotification, tx)
 						if err != nil {
-							log.Err(err).Msg(fmt.Sprintf("could not update status for uuid %s", outstandingNotification.ServerUUID))
-						}
-						err = tx.Commit(ctx)
-						if err != nil {
-							log.Err(err).Msg(fmt.Sprintf("could not commit tx successful notification send for %s", outstandingNotification.ServerUUID))
+							tx.Rollback(ctx)
+						} else {
+							_, err = ous.kc.CommitMessage(e)
+							tx.Commit(ctx)
 						}
 					}
-				}
+				}()
 			case kafka.Error:
 				// maybe fatal here?
 			default:
-				//	fmt.Printf("Ignored %v\n", e)
+				// fmt.Printf("Ignored %v\n", e)
 			}
 		}
 	}()
+}
+
+func (ous *OutstandingService) handleMsg(err error, ctx context.Context, outstandingNotification OutstandingNotification, tx *storage.WrappedTx) error {
+	sv, err := ous.persistence.GetForUpdate(ctx, outstandingNotification.ServerUUID, tx)
+	if err != nil {
+		log.Err(err).Msg(fmt.Sprintf("could not get for update server uuid %s", outstandingNotification.ServerUUID))
+		return err
+	}
+	if sv.Status.Int == int16(NOT_PROCESSED) {
+		errSend := ous.notificator.DelegateNotification(&DelegatingNotification{
+			serverUUID: sv.ServerUUID,
+			txt:        sv.Txt,
+			dest:       Destination(sv.Dest.Int),
+		})
+		if errSend != nil {
+			log.Err(errSend).Msg(fmt.Sprintf("could not send notification for server uuid %s", outstandingNotification.ServerUUID))
+			return err
+		} else {
+			err = ous.persistence.UpdateStatus(ctx, outstandingNotification.ServerUUID, pgtype.Int2{
+				Int:    int16(PROCESSED),
+				Status: pgtype.Present,
+			}, tx)
+			if err != nil {
+				log.Err(err).Msg(fmt.Sprintf("could not update status for uuid %s", outstandingNotification.ServerUUID))
+				return err
+			}
+			if err != nil {
+				log.Err(err).Msg(fmt.Sprintf("could not commit tx successful notification send for %s", outstandingNotification.ServerUUID))
+				return err
+			}
+		}
+	} else {
+		// skip since its already processed
+		log.Info().Msg(fmt.Sprintf("skipping already processed notification %s", sv.ServerUUID))
+		if err != nil {
+			log.Err(err).Msg(fmt.Sprintf("could not commit tx successful notification send for %s", outstandingNotification.ServerUUID))
+		}
+	}
+	return err
 }
