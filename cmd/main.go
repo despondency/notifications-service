@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/caarlos0/env/v6"
+	"github.com/cenkalti/backoff/v4"
 	"github.com/despondency/notifications-service/internal/messaging"
 	"github.com/despondency/notifications-service/internal/notification"
 	"github.com/despondency/notifications-service/internal/storage"
@@ -32,7 +33,6 @@ type KafkaConfig struct {
 	InternalTopic      string `env:"INTERNAL_TOPIC"`
 	OutstandingGroupID string `env:"OUTSTANDING_GROUP_ID"`
 	OutstandingTopic   string `env:"OUTSTANDING_TOPIC"`
-	Acks               string `env:"ACKS"`
 }
 
 type DBConfig struct {
@@ -64,13 +64,13 @@ func main() {
 	txCreator := storage.NewWrappedTransactionCreator(connPool)
 
 	internalKafkaProducer, err :=
-		messaging.NewKafkaProducer(cfg.BootstrapServers, cfg.InternalTopic, "notifications-service", cfg.Acks)
+		messaging.NewKafkaProducer(cfg.BootstrapServers, cfg.InternalTopic, "notifications-service", "all")
 	if err != nil {
 		log.Panic().Err(err).Msg("cannot create kafka internal producer")
 	}
 
 	outstandingKafkaProducer, err :=
-		messaging.NewKafkaProducer(cfg.BootstrapServers, cfg.OutstandingTopic, "notifications-service", cfg.Acks)
+		messaging.NewKafkaProducer(cfg.BootstrapServers, cfg.OutstandingTopic, "notifications-service", "1")
 	if err != nil {
 		log.Panic().Err(err).Msg("cannot create kafka internal consumer")
 	}
@@ -126,16 +126,23 @@ func main() {
 
 func runMigrations(dbConnectString string) {
 	crdbMigrationString := strings.Replace(dbConnectString, "postgres", "cockroachdb", 1)
-	m, err := migrate.New(
-		"file://./migrations",
-		crdbMigrationString)
-	if err != nil {
-		log.Panic().Err(err).Msg("cannot create migrations")
-	}
-	if err := m.Up(); err != nil {
-		if err.Error() == "no change" {
-			return
+	err := backoff.Retry(func() error {
+		m, err := migrate.New(
+			"file://./migrations",
+			crdbMigrationString)
+		if err != nil {
+			log.Panic().Err(err).Msg("cannot create migrations")
+			return err
 		}
+		if err := m.Up(); err != nil {
+			if err.Error() == "no change" {
+				return nil
+			}
+			return err
+		}
+		return nil
+	}, backoff.WithMaxRetries(backoff.NewConstantBackOff(time.Second*1), 10))
+	if err != nil {
 		log.Panic().Err(err).Msg("cannot run migrations")
 	}
 }

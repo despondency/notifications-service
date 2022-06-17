@@ -4,7 +4,7 @@ go 1.18
 
 require (
 	github.com/caarlos0/env/v6 v6.9.3
-	github.com/cockroachdb/cockroach-go/v2 v2.2.13
+	github.com/cenkalti/backoff/v4 v4.1.3
 	github.com/confluentinc/confluent-kafka-go v1.8.2
 	github.com/golang-migrate/migrate/v4 v4.15.2
 	github.com/google/uuid v1.3.0
@@ -16,6 +16,7 @@ require (
 )
 
 require (
+	github.com/cockroachdb/cockroach-go/v2 v2.2.13 // indirect
 	github.com/hashicorp/errwrap v1.1.0 // indirect
 	github.com/hashicorp/go-multierror v1.1.1 // indirect
 	github.com/jackc/chunkreader/v2 v2.0.1 // indirect
