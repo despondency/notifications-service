@@ -7,6 +7,7 @@ github.com/cenkalti/backoff/v4
 # github.com/cockroachdb/cockroach-go/v2 v2.2.13
 ## explicit; go 1.13
 github.com/cockroachdb/cockroach-go/v2/crdb
+github.com/cockroachdb/cockroach-go/v2/crdb/crdbpgx
 # github.com/confluentinc/confluent-kafka-go v1.8.2
 ## explicit
 github.com/confluentinc/confluent-kafka-go/kafka

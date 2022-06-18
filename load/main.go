@@ -8,14 +8,13 @@ import (
 	"github.com/despondency/notifications-service/internal/notification"
 	"github.com/google/uuid"
 	"io/ioutil"
-	"math/rand"
 	"net/http"
 	"sync"
 	"time"
 )
 
 const (
-	numberOfNotifications = 100_000
+	numberOfNotifications = 10_000
 )
 
 var client = &http.Client{Transport: &http.Transport{
@@ -57,8 +56,8 @@ func sendNotification(idx int) {
 	if err != nil {
 		panic(err)
 	}
-	rnd := rand.Intn(2)
-	req, err := http.NewRequest(http.MethodPost, fmt.Sprintf("http://localhost:809%d/notification", rnd), bytes.NewBuffer(b))
+	//	rnd := rand.Intn(2)
+	req, err := http.NewRequest(http.MethodPost, fmt.Sprintf("http://localhost:809%d/notification", 0), bytes.NewBuffer(b))
 	if err != nil {
 		panic(err)
 	}
@@ -72,7 +71,7 @@ func sendNotification(idx int) {
 	_, err = ioutil.ReadAll(resp.Body)
 	if err != nil {
 		fmt.Println("read body error", err.Error())
-		return
+		panic(err)
 	}
 	//fmt.Printf("response: %s\n", content)
 }

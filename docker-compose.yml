@@ -2,25 +2,25 @@
 version: '3.9'
 
 services:
-  notifications:
-    container_name: notifications
-    build:
-      context: .
-      dockerfile: Dockerfile
-    image: notifications:1.0
-    environment:
-      - DB_CONNECT_STRING=postgres://root:@crdb:26257/postgres?sslmode=disable
-      - INTERNAL_GROUP_ID=received-notifications-group-id
-      - INTERNAL_TOPIC=received-notifications
-      - KAFKA_BOOTSTRAP_SERVERS=kafka:9093
-      - OUTSTANDING_GROUP_ID=outstanding-notifications-group-id
-      - OUTSTANDING_TOPIC=outstanding-notifications
-      - PORT=8090
-    ports:
-      - "8090:8090"
-    depends_on:
-      - crdb
-      - kafka
+#  notifications:
+#    container_name: notifications
+#    build:
+#      context: .
+#      dockerfile: Dockerfile
+#    image: notifications:1.0
+#    environment:
+#      - DB_CONNECT_STRING=postgres://root:@crdb:26257/postgres?sslmode=disable
+#      - INTERNAL_GROUP_ID=received-notifications-group-id
+#      - INTERNAL_TOPIC=received-notifications
+#      - KAFKA_BOOTSTRAP_SERVERS=kafka:9093
+#      - OUTSTANDING_GROUP_ID=outstanding-notifications-group-id
+#      - OUTSTANDING_TOPIC=outstanding-notifications
+#      - PORT=8090
+#    ports:
+#      - "8090:8090"
+#    depends_on:
+#      - crdb
+#      - kafka
 
   zookeeper:
     container_name: zookeeper

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/cockroachdb/cockroach-go/v2/crdb/crdbpgx"
 	"github.com/confluentinc/confluent-kafka-go/kafka"
 	"github.com/despondency/notifications-service/internal/messaging"
 	"github.com/despondency/notifications-service/internal/storage"
@@ -19,17 +20,13 @@ type InternalService struct {
 	consumer                         *kafka.Consumer
 	kp                               *messaging.KafkaProducer
 	outstandingNotificationsProducer *messaging.KafkaProducer
-	txCreator                        *storage.WrappedTxCreator
-	persistence                      storage.Persistence
+	persistence                      *storage.CRDBPersistence
 	stopped                          *atomic.Bool
+	maxRoutines                      int
 }
 
-const (
-	receivedNotificationsMaxGoRoutines = 10
-)
-
 func NewInternalService(bootstrapServers, receivedNotificationsGroupID, resetOffset, receivedNotificationsTopic, enableAutoCommit string,
-	kp *messaging.KafkaProducer, outstandingNotificationsProducer *messaging.KafkaProducer, txCreator *storage.WrappedTxCreator, persistence storage.Persistence) *InternalService {
+	kp *messaging.KafkaProducer, outstandingNotificationsProducer *messaging.KafkaProducer, persistence *storage.CRDBPersistence, maxRoutines int) *InternalService {
 	c, err := kafka.NewConsumer(&kafka.ConfigMap{
 		"bootstrap.servers":  bootstrapServers,
 		"group.id":           receivedNotificationsGroupID,
@@ -43,10 +40,10 @@ func NewInternalService(bootstrapServers, receivedNotificationsGroupID, resetOff
 	is := &InternalService{
 		kp:                               kp,
 		consumer:                         c,
-		txCreator:                        txCreator,
 		persistence:                      persistence,
 		outstandingNotificationsProducer: outstandingNotificationsProducer,
 		stopped:                          atomic.NewBool(false),
+		maxRoutines:                      maxRoutines,
 	}
 	is.consumeNotificationInternal()
 	return is
@@ -87,10 +84,10 @@ func (s *InternalService) Stop() {
 }
 
 func (s *InternalService) consumeNotificationInternal() {
-	maxReq := make(chan struct{}, receivedNotificationsMaxGoRoutines)
+	maxReq := make(chan struct{}, s.maxRoutines)
 	go func() {
 		for s.stopped.Load() == false {
-			ev := s.consumer.Poll(1000)
+			ev := s.consumer.Poll(0)
 			switch e := ev.(type) {
 			case *kafka.Message:
 				maxReq <- struct{}{}
@@ -122,17 +119,13 @@ func (s *InternalService) createOutstandingNotification(ctx context.Context, msg
 	if err != nil {
 		return err
 	}
-	tx, err := s.txCreator.NewTx(ctx, pgx.TxOptions{})
+	var affected int64
+	err = crdbpgx.ExecuteTx(ctx, s.persistence.GetPool(), pgx.TxOptions{}, func(tx pgx.Tx) error {
+		affected, err = s.persistence.InsertOnConflictNothing(ctx, ToUnprocessedNotification(serverNotification), tx)
+		return err
+	})
 	if err != nil {
 		return err
-	}
-	affected, err := s.persistence.InsertOnConflictNothing(ctx, ToUnprocessedNotification(serverNotification), tx)
-	if err != nil {
-		return err
-	}
-	err = tx.Commit(ctx)
-	if err != nil {
-		log.Err(err).Msg("error committing server notification")
 	}
 	// this signifies that we actually have a new "unique" notification.
 	// if it's a duplicate it will be 0

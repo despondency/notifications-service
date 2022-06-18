@@ -3,6 +3,7 @@ package notification
 import (
 	"context"
 	"encoding/json"
+	"github.com/cockroachdb/cockroach-go/v2/crdb/crdbpgx"
 	"github.com/confluentinc/confluent-kafka-go/kafka"
 	"github.com/despondency/notifications-service/internal/storage"
 	"github.com/jackc/pgtype"
@@ -14,19 +15,14 @@ import (
 type OutstandingService struct {
 	notificator *DelegatingNotificator
 	consumer    *kafka.Consumer
-	txCreator   *storage.WrappedTxCreator
-	persistence storage.Persistence
+	persistence *storage.CRDBPersistence
 	stopped     *atomic.Bool
+	maxRoutines int
 }
 
-const (
-	outstandingNotificationMaxGoRoutines = 10
-)
-
 func NewOutstandingService(
-	bootstrapServers, outstandingGroupID, autoResetOffset, enableAutoCommit, outstandingNotificationsTopic string,
-	txCreator *storage.WrappedTxCreator, persistence storage.Persistence,
-	notificator *DelegatingNotificator) *OutstandingService {
+	bootstrapServers, outstandingGroupID, autoResetOffset, enableAutoCommit, outstandingNotificationsTopic string, persistence *storage.CRDBPersistence,
+	notificator *DelegatingNotificator, maxRoutines int) *OutstandingService {
 	consumer, err := kafka.NewConsumer(&kafka.ConfigMap{
 		"bootstrap.servers":  bootstrapServers,
 		"group.id":           outstandingGroupID,
@@ -38,9 +34,9 @@ func NewOutstandingService(
 	err = consumer.Subscribe(outstandingNotificationsTopic, nil)
 	ous := &OutstandingService{
 		consumer:    consumer,
-		txCreator:   txCreator,
 		persistence: persistence,
 		notificator: notificator,
+		maxRoutines: maxRoutines,
 		stopped:     atomic.NewBool(false),
 	}
 	ous.consumeNotificationOutstanding()
@@ -59,10 +55,10 @@ func (ous *OutstandingService) Stop() {
 	}
 }
 func (ous *OutstandingService) consumeNotificationOutstanding() {
-	maxReq := make(chan struct{}, outstandingNotificationMaxGoRoutines)
+	maxReq := make(chan struct{}, ous.maxRoutines)
 	go func() {
 		for ous.stopped.Load() == false {
-			ev := ous.consumer.Poll(1000)
+			ev := ous.consumer.Poll(0)
 			switch e := ev.(type) {
 			case *kafka.Message:
 				maxReq <- struct{}{}
@@ -76,30 +72,15 @@ func (ous *OutstandingService) consumeNotificationOutstanding() {
 					if err != nil {
 						log.Err(err).Msg("cannot consume internal notification")
 						return
-					}
-					tx, err := ous.txCreator.NewTx(ctx, pgx.TxOptions{})
-					if err != nil {
-						log.Err(err).Msg("could not create tx")
-						return
 					} else {
-						err := ous.handleMsg(err, ctx, outstandingNotification, tx)
+						err = ous.handleMsg(ctx, outstandingNotification)
 						if err != nil {
-							log.Err(err).Msg("error handling message for outstanding notification")
-							errRollback := tx.Rollback(ctx)
-							if errRollback != nil {
-								log.Err(errRollback).Msg("could not rollback outstanding notification tx")
-							}
-						} else {
-							errCommit := tx.Commit(ctx)
-							if errCommit != nil {
-								log.Err(errCommit).Msg("could not commit outstanding notification tx")
-								return
-							}
-							_, errCommitMsg := ous.consumer.CommitMessage(e)
-							if errCommitMsg != nil {
-								log.Err(errCommitMsg).Msg("could not commit outstanding notification msg")
-								return
-							}
+							return
+						}
+						_, errCommitMsg := ous.consumer.CommitMessage(e)
+						if errCommitMsg != nil {
+							log.Err(errCommitMsg).Msg("could not commit outstanding notification msg")
+							return
 						}
 					}
 				}()
@@ -112,28 +93,31 @@ func (ous *OutstandingService) consumeNotificationOutstanding() {
 	}()
 }
 
-func (ous *OutstandingService) handleMsg(err error, ctx context.Context, outstandingNotification OutstandingNotification, tx *storage.WrappedTx) error {
-	sv, err := ous.persistence.GetForUpdate(ctx, outstandingNotification.UUID, tx)
-	if err != nil {
-		return err
-	}
-	if sv.Status.Int == int16(NOT_PROCESSED) {
-		errSend := ous.notificator.DelegateNotification(&DelegatingNotification{
-			uuid: sv.UUID,
-			txt:  sv.Txt,
-			dest: Destination(sv.Dest.Int),
-		})
-		if errSend != nil {
+func (ous *OutstandingService) handleMsg(ctx context.Context, outstandingNotification OutstandingNotification) error {
+	err := crdbpgx.ExecuteTx(ctx, ous.persistence.GetPool(), pgx.TxOptions{}, func(tx pgx.Tx) error {
+		sv, err := ous.persistence.GetForUpdate(ctx, outstandingNotification.UUID, tx)
+		if err != nil {
 			return err
-		} else {
-			err = ous.persistence.UpdateStatus(ctx, outstandingNotification.UUID, pgtype.Int2{
-				Int:    int16(PROCESSED),
-				Status: pgtype.Present,
-			}, tx)
-			if err != nil {
+		}
+		if sv.Status.Int == int16(NOT_PROCESSED) {
+			errSend := ous.notificator.DelegateNotification(&DelegatingNotification{
+				uuid: sv.UUID,
+				txt:  sv.Txt,
+				dest: Destination(sv.Dest.Int),
+			})
+			if errSend != nil {
 				return err
+			} else {
+				err = ous.persistence.UpdateStatus(ctx, outstandingNotification.UUID, pgtype.Int2{
+					Int:    int16(PROCESSED),
+					Status: pgtype.Present,
+				}, tx)
+				if err != nil {
+					return err
+				}
 			}
 		}
-	}
+		return nil
+	})
 	return err
 }

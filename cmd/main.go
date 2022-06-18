@@ -25,7 +25,9 @@ import (
 type Config struct {
 	KafkaConfig
 	DBConfig
-	Port int `env:"PORT" envDefault:"8090"`
+	Port                   int `env:"PORT" envDefault:"8090"`
+	MaxOutstandingRoutines int `env:"MAX_OUTSTANDING_ROUTINES" envDefault:"50"`
+	MaxReceivingRoutines   int `env:"MAX_RECEIVING_ROUTINES" envDefault:"50"`
 }
 
 type KafkaConfig struct {
@@ -69,8 +71,6 @@ func main() {
 
 	pers := storage.NewCRDBPersistence(connPool)
 
-	txCreator := storage.NewWrappedTransactionCreator(connPool)
-
 	internalKafkaProducer, err :=
 		messaging.NewKafkaProducer(cfg.BootstrapServers, cfg.InternalTopic, "notifications-service", "all")
 	if err != nil {
@@ -85,15 +85,14 @@ func main() {
 
 	is := notification.NewInternalService(cfg.BootstrapServers, cfg.InternalGroupID, "earliest",
 		cfg.InternalTopic, "false",
-		internalKafkaProducer, outstandingKafkaProducer, txCreator, pers)
+		internalKafkaProducer, outstandingKafkaProducer, pers, cfg.MaxReceivingRoutines)
 
 	notifiers := &notification.DelegatingNotificator{
 		Notificators: []notification.Notificator{&notification.SMSNotificator{}, &notification.EmailNotificator{}, &notification.SlackNotificator{}},
 	}
 
 	ous := notification.NewOutstandingService(cfg.BootstrapServers, cfg.OutstandingGroupID, "earliest",
-		"true", cfg.OutstandingTopic,
-		txCreator, pers, notifiers)
+		"true", cfg.OutstandingTopic, pers, notifiers, cfg.MaxOutstandingRoutines)
 
 	zerolog.TimeFieldFormat = zerolog.TimeFormatUnix
 
