@@ -98,7 +98,7 @@ func main() {
 		Handler: router,
 	}
 
-	idleConnsClosed := make(chan struct{})
+	wait := make(chan struct{})
 	go func() {
 		sigint := make(chan os.Signal, 1)
 		signal.Notify(sigint, os.Interrupt)
@@ -113,7 +113,7 @@ func main() {
 		ous.Stop()
 		internalKafkaProducer.Stop()
 		connPool.Close()
-		close(idleConnsClosed)
+		close(wait)
 	}()
 
 	if err := srv.ListenAndServe(); err != http.ErrServerClosed {
@@ -121,7 +121,7 @@ func main() {
 		log.Fatal().Err(err).Msg(fmt.Sprintf("HTTP server ListenAndServe"))
 	}
 
-	<-idleConnsClosed
+	<-wait
 }
 
 func runMigrations(dbConnectString string) {
@@ -131,17 +131,17 @@ func runMigrations(dbConnectString string) {
 			"file://./migrations",
 			crdbMigrationString)
 		if err != nil {
-			log.Panic().Err(err).Msg("cannot create migrations")
 			return err
 		}
-		if err := m.Up(); err != nil {
+		if err = m.Up(); err != nil {
 			if err.Error() == "no change" {
 				return nil
 			}
 			return err
 		}
+		log.Info().Msg("migrations ran successfully")
 		return nil
-	}, backoff.WithMaxRetries(backoff.NewConstantBackOff(time.Second*1), 10))
+	}, backoff.WithMaxRetries(backoff.NewExponentialBackOff(), 10))
 	if err != nil {
 		log.Panic().Err(err).Msg("cannot run migrations")
 	}

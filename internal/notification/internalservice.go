@@ -59,8 +59,12 @@ func (s *InternalService) PushNotificationInternal(n *Notification) error {
 	if err != nil {
 		log.Err(err).Msg(fmt.Sprintf("destination conversion to server notification destination failed, original destination is %s", n.Destination))
 	}
+	nUUID, err := uuid.Parse(n.UUID)
+	if err != nil {
+		return err
+	}
 	serverNotification := &ServerNotification{
-		ServerUUID:              uuid.New(),
+		UUID:                    nUUID,
 		ServerReceivedTimestamp: time.Now().UTC(),
 		NotificationTxt:         n.NotificationTxt,
 		Dest:                    dest,
@@ -124,7 +128,7 @@ func (s *InternalService) consumeNotificationInternal() {
 
 func (s *InternalService) pushOutstandingNotification(serverNotification *ServerNotification) error {
 	on := OutstandingNotification{
-		ServerUUID: serverNotification.ServerUUID,
+		UUID: serverNotification.UUID,
 	}
 	b, err := json.Marshal(on)
 	if err != nil {
@@ -162,8 +166,8 @@ func (s *InternalService) insertNewServerNotification(ctx context.Context, e *ka
 
 func ToUnprocessedNotification(n *ServerNotification) *storage.Notification {
 	return &storage.Notification{
-		ServerUUID: n.ServerUUID,
-		Txt:        n.NotificationTxt,
+		UUID: n.UUID,
+		Txt:  n.NotificationTxt,
 		Status: pgtype.Int2{
 			Int:    int16(NOT_PROCESSED),
 			Status: pgtype.Present,

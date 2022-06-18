@@ -114,20 +114,20 @@ func (ous *OutstandingService) consumeNotificationOutstanding() {
 }
 
 func (ous *OutstandingService) handleMsg(err error, ctx context.Context, outstandingNotification OutstandingNotification, tx *storage.WrappedTx) error {
-	sv, err := ous.persistence.GetForUpdate(ctx, outstandingNotification.ServerUUID, tx)
+	sv, err := ous.persistence.GetForUpdate(ctx, outstandingNotification.UUID, tx)
 	if err != nil {
 		return err
 	}
 	if sv.Status.Int == int16(NOT_PROCESSED) {
 		errSend := ous.notificator.DelegateNotification(&DelegatingNotification{
-			serverUUID: sv.ServerUUID,
-			txt:        sv.Txt,
-			dest:       Destination(sv.Dest.Int),
+			uuid: sv.UUID,
+			txt:  sv.Txt,
+			dest: Destination(sv.Dest.Int),
 		})
 		if errSend != nil {
 			return err
 		} else {
-			err = ous.persistence.UpdateStatus(ctx, outstandingNotification.ServerUUID, pgtype.Int2{
+			err = ous.persistence.UpdateStatus(ctx, outstandingNotification.UUID, pgtype.Int2{
 				Int:    int16(PROCESSED),
 				Status: pgtype.Present,
 			}, tx)
@@ -137,7 +137,7 @@ func (ous *OutstandingService) handleMsg(err error, ctx context.Context, outstan
 		}
 	} else {
 		// skip since its already processed
-		log.Debug().Msg(fmt.Sprintf("skipping already processed notification %s", sv.ServerUUID))
+		log.Debug().Msg(fmt.Sprintf("skipping already processed notification %s", sv.UUID))
 	}
 	return err
 }

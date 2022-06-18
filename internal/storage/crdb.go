@@ -20,9 +20,9 @@ func NewCRDBPersistence(pool *pgxpool.Pool) *CRDBPersistence {
 
 func (crdbp *CRDBPersistence) InsertOnConflictNothing(ctx context.Context, notification *Notification, tx *WrappedTx) error {
 	_, errExec := (*tx.Tx).Exec(ctx,
-		"INSERT into notifications(server_uuid, txt, status, destination, server_timestamp, last_updated) "+
-			"VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT(server_uuid) DO NOTHING",
-		notification.ServerUUID,
+		"INSERT into notifications(uuid, txt, status, destination, server_timestamp, last_updated) "+
+			"VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT(uuid) DO NOTHING",
+		notification.UUID,
 		notification.Txt,
 		notification.Status,
 		notification.Dest,
@@ -38,7 +38,7 @@ func (crdbp *CRDBPersistence) InsertOnConflictNothing(ctx context.Context, notif
 func (crdbp *CRDBPersistence) UpdateStatus(ctx context.Context, serverUUID uuid.UUID, status pgtype.Int2, tx *WrappedTx) error {
 	_, errExec := (*tx.Tx).Exec(ctx,
 		"UPDATE notifications SET status=$1, last_updated=$2 "+
-			"WHERE server_uuid = $3",
+			"WHERE uuid = $3",
 		status,
 		pgtype.Timestamp{
 			Time:   time.Now().UTC(),
@@ -54,8 +54,8 @@ func (crdbp *CRDBPersistence) UpdateStatus(ctx context.Context, serverUUID uuid.
 
 func (crdbp *CRDBPersistence) GetForUpdate(ctx context.Context, serverUUID uuid.UUID, txx *WrappedTx) (*Notification, error) {
 	notification := &Notification{}
-	r := (*txx.Tx).QueryRow(ctx, "SELECT server_uuid, txt, status, destination, server_timestamp, last_updated FROM notifications WHERE server_uuid = $1 FOR UPDATE", serverUUID)
-	errScan := r.Scan(&notification.ServerUUID, &notification.Txt, &notification.Status, &notification.Dest, &notification.ServerTimestamp, &notification.LastUpdated)
+	r := (*txx.Tx).QueryRow(ctx, "SELECT uuid, txt, status, destination, server_timestamp, last_updated FROM notifications WHERE uuid = $1 FOR UPDATE", serverUUID)
+	errScan := r.Scan(&notification.UUID, &notification.Txt, &notification.Status, &notification.Dest, &notification.ServerTimestamp, &notification.LastUpdated)
 	if errScan != nil {
 		return nil, errScan
 	}

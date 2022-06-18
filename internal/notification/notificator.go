@@ -10,9 +10,9 @@ type Notificator interface {
 }
 
 type DelegatingNotification struct {
-	serverUUID uuid.UUID
-	txt        string
-	dest       Destination
+	uuid uuid.UUID
+	txt  string
+	dest Destination
 }
 
 type DelegatingNotificator struct {

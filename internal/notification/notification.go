@@ -37,17 +37,18 @@ func toServerNotificationDestination(destination string) (Destination, error) {
 }
 
 type ServerNotification struct {
-	ServerUUID              uuid.UUID   `json:"server_uuid"`
+	UUID                    uuid.UUID   `json:"uuid"`
 	ServerReceivedTimestamp time.Time   `json:"server_received_timestamp"`
 	NotificationTxt         string      `json:"txt"`
 	Dest                    Destination `json:"destination"`
 }
 
 type OutstandingNotification struct {
-	ServerUUID uuid.UUID `json:"server_uuid"`
+	UUID uuid.UUID `json:"uuid"`
 }
 
 type Notification struct {
+	UUID            string `json:"uuid"`
 	NotificationTxt string `json:"txt"`
 	Destination     string `json:"destination"`
 }

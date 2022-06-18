@@ -50,5 +50,5 @@ services:
         - "26257:26257"
         - "8080:8080"
       command: start-single-node --insecure
-      volumes:
-        - "${PWD}/cockroach-data/crdb:/cockroach/cockroach-data"
+#      volumes:
+#        - "${PWD}/cockroach-data/crdb:/cockroach/cockroach-data"

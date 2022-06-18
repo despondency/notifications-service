@@ -6,7 +6,7 @@ import (
 )
 
 type Notification struct {
-	ServerUUID      uuid.UUID
+	UUID            uuid.UUID
 	Txt             string
 	Status          pgtype.Int2
 	Dest            pgtype.Int2
