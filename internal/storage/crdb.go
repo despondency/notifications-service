@@ -18,8 +18,8 @@ func NewCRDBPersistence(pool *pgxpool.Pool) *CRDBPersistence {
 	}
 }
 
-func (crdbp *CRDBPersistence) InsertOnConflictNothing(ctx context.Context, notification *Notification, tx *WrappedTx) error {
-	_, errExec := (*tx.Tx).Exec(ctx,
+func (crdbp *CRDBPersistence) InsertOnConflictNothing(ctx context.Context, notification *Notification, tx *WrappedTx) (int64, error) {
+	v, errExec := (*tx.Tx).Exec(ctx,
 		"INSERT into notifications(uuid, txt, status, destination, server_timestamp, last_updated) "+
 			"VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT(uuid) DO NOTHING",
 		notification.UUID,
@@ -30,9 +30,9 @@ func (crdbp *CRDBPersistence) InsertOnConflictNothing(ctx context.Context, notif
 		notification.LastUpdated,
 	)
 	if errExec != nil {
-		return errExec
+		return -1, errExec
 	}
-	return nil
+	return v.RowsAffected(), nil
 }
 
 func (crdbp *CRDBPersistence) UpdateStatus(ctx context.Context, serverUUID uuid.UUID, status pgtype.Int2, tx *WrappedTx) error {
@@ -55,6 +55,16 @@ func (crdbp *CRDBPersistence) UpdateStatus(ctx context.Context, serverUUID uuid.
 func (crdbp *CRDBPersistence) GetForUpdate(ctx context.Context, serverUUID uuid.UUID, txx *WrappedTx) (*Notification, error) {
 	notification := &Notification{}
 	r := (*txx.Tx).QueryRow(ctx, "SELECT uuid, txt, status, destination, server_timestamp, last_updated FROM notifications WHERE uuid = $1 FOR UPDATE", serverUUID)
+	errScan := r.Scan(&notification.UUID, &notification.Txt, &notification.Status, &notification.Dest, &notification.ServerTimestamp, &notification.LastUpdated)
+	if errScan != nil {
+		return nil, errScan
+	}
+	return notification, nil
+}
+
+func (crdbp *CRDBPersistence) Get(ctx context.Context, serverUUID uuid.UUID, txx *WrappedTx) (*Notification, error) {
+	notification := &Notification{}
+	r := (*txx.Tx).QueryRow(ctx, "SELECT uuid, txt, status, destination, server_timestamp, last_updated FROM notifications WHERE uuid = $1", serverUUID)
 	errScan := r.Scan(&notification.UUID, &notification.Txt, &notification.Status, &notification.Dest, &notification.ServerTimestamp, &notification.LastUpdated)
 	if errScan != nil {
 		return nil, errScan

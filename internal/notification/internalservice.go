@@ -47,22 +47,7 @@ func (s *InternalService) HandleNotification(ctx context.Context, n *Notificatio
 		NotificationTxt:         n.NotificationTxt,
 		Dest:                    dest,
 	}
-	err = s.createOutstandingNotification(ctx, serverNotification)
-	if err != nil {
-		return err
-	}
-	outStandingNotification := &OutstandingNotification{
-		UUID: serverNotification.UUID,
-	}
-	b, err := json.Marshal(outStandingNotification)
-	if err != nil {
-		return err
-	}
-	err = s.outstandingNotificationsProducer.Produce(b)
-	if err != nil {
-		return err
-	}
-	return nil
+	return s.createOutstandingNotification(ctx, serverNotification)
 }
 
 func (s *InternalService) createOutstandingNotification(ctx context.Context, serverNotification *ServerNotification) error {
@@ -70,17 +55,31 @@ func (s *InternalService) createOutstandingNotification(ctx context.Context, ser
 	if err != nil {
 		return err
 	}
-	err = s.persistence.InsertOnConflictNothing(ctx, ToUnprocessedNotification(serverNotification), tx)
+	affected, err := s.persistence.InsertOnConflictNothing(ctx, ToUnprocessedNotification(serverNotification), tx)
 	if err != nil {
 		return err
 	}
-	defer func() {
-		err = tx.Commit(ctx)
-		if err != nil {
-			log.Err(err).Msg("error committing server notification")
+	err = tx.Commit(ctx)
+	if err != nil {
+		log.Err(err).Msg("error committing server notification")
+	}
+	// this signifies that we actually have a new "unique" notification.
+	// if it's a duplicate it will be 0
+	if affected == 1 {
+		outStandingNotification := &OutstandingNotification{
+			UUID: serverNotification.UUID,
 		}
-	}()
-	return err
+		b, err := json.Marshal(outStandingNotification)
+		if err != nil {
+			return err
+		}
+		err = s.outstandingNotificationsProducer.Produce(b)
+		if err != nil {
+			return err
+		}
+		return err
+	}
+	return nil
 }
 
 func ToUnprocessedNotification(n *ServerNotification) *storage.Notification {

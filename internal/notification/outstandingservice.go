@@ -62,7 +62,7 @@ func (ous *OutstandingService) consumeNotificationOutstanding() {
 	maxReq := make(chan struct{}, outstandingNotificationsMax)
 	go func() {
 		for ous.stopped.Load() == false {
-			ev := ous.consumer.Poll(0)
+			ev := ous.consumer.Poll(1000)
 			switch e := ev.(type) {
 			case *kafka.Message:
 				maxReq <- struct{}{}
@@ -105,8 +105,8 @@ func (ous *OutstandingService) consumeNotificationOutstanding() {
 				}()
 			case kafka.Error:
 				// maybe fatal here?
+				// usually this indicates unrecoverable error
 			default:
-				// fmt.Printf("Ignored %v\n", e)
 			}
 		}
 	}()

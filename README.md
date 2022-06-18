@@ -5,16 +5,36 @@
 Requirements:
 
 ```
-Kafka
-CockroachDB
 Docker
 Golang
 ```
 
+#### Ginkgo for testing
+```
+go install github.com/onsi/ginkgo/v2/ginkgo
+```
+
 #### How to run:
 ```
-make run
+make run-local
 ```
+
+#### Run integrations:
+```
+make integration-tests
+```
+
+#### Run unit tests:
+```
+make unit-tests
+```
+
+#### Run local load env (WIP):
+```
+make run-load
+```
+
+
 
 #### Request to try the notifications service:
 ```
@@ -22,6 +42,15 @@ curl -X POST -H "Content-Type: application/json" \
     -d '{"txt": "Kole Poluchi li", "destination": "EMAIL", "uuid": "8f58c11d-ebc2-4ca7-a934-226e2bb6192c"}' \
     http://localhost:8091/notification
 ```
+
+#### Points to generally improve:
+
+1. Refactor more, extract and reuse!
+2. More more more more testing!!!!! I've written a few integrations, and an endpoint test, but generally will try to achieve close to 85%+ coverage
+3. Add metrics, tracing (Prometheus/Jaeger)
+4. Find Kafka Client that can do batched reads, start batching to DB! (that's a good performance improvement)
+5. Load tests (We have to keep client's SLA agreement) (Currently there is some kind of load test suite, but is VERY basic, in a real application i'd go with some serious firepower and a load test environment!)
+6. Correctness tests (Simulate failures by using multiple instances.) (Chaos testing), even better would be a nightly environment + chaos monkey
 
 ### Architectural diagram
 
@@ -37,9 +66,9 @@ curl -X POST -H "Content-Type: application/json" \
 
 Architectural diagram explanation
 
-We have the assumption that all notification providers (SMS, Email, Slack) have inbuilt deduplication based on an uuid. So posting a notification > 1 times will result in one push to the user
-
 First of all to achieve Exactly Once End to End we need all parts of our system to be idempotent
+We have the assumption that all notification providers (SMS, Email, Slack) have inbuilt deduplication based on an uuid. So posting a notification > 1 times will result in one push to the user 
+
 
 #### Flow of messages
 
@@ -49,6 +78,6 @@ First of all to achieve Exactly Once End to End we need all parts of our system 
 
 #### Performance
 
-Extremely scalable. By adding more CockroachDB nodes/Kafka nodes you can scale in the millions of events/sec. A limitation would be amount of transactions you can open.
-However there is a way to fix that as well, batching kafka reads + batching Gets/Inserts to DB will scale the throughput immensely.
+Extremely scalable. By adding more CockroachDB nodes/Kafka nodes you can scale in a LOT. A limitation would be amount of transactions you can open.
+However there is a way to fix that as well, batching kafka reads + batching Gets/Inserts to DB will scale the throughput immensely. See Points To Improve (**4**)
 

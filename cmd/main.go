@@ -25,6 +25,7 @@ import (
 type Config struct {
 	KafkaConfig
 	DBConfig
+	Port int `env:"PORT" envDefault:"8090"`
 }
 
 type KafkaConfig struct {
@@ -36,7 +37,6 @@ type KafkaConfig struct {
 type DBConfig struct {
 	DBConnectString string `env:"DB_CONNECT_STRING"`
 	MigrationsPath  string `env:"MIGRATIONS_PATH"`
-	Port            int    `env:"PORT" default:"8090"`
 }
 
 func main() {
@@ -45,7 +45,6 @@ func main() {
 	if err := env.Parse(&cfg); err != nil {
 		panic(err)
 	}
-	fmt.Printf("%+v\n", cfg)
 
 	runMigrations(cfg.DBConnectString)
 
@@ -113,10 +112,13 @@ func main() {
 		close(wait)
 	}()
 
-	if err := srv.ListenAndServe(); err != http.ErrServerClosed {
-		// Error starting or closing listener:
-		log.Fatal().Err(err).Msg(fmt.Sprintf("HTTP server ListenAndServe"))
-	}
+	go func() {
+		if err := srv.ListenAndServe(); err != http.ErrServerClosed {
+			// Error starting or closing listener:
+			log.Fatal().Err(err).Msg(fmt.Sprintf("HTTP server ListenAndServe"))
+		}
+	}()
+	log.Info().Msg(fmt.Sprintf("notifications service started at port %d", cfg.Port))
 
 	<-wait
 }

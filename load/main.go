@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	numberOfNotifications = 10000
+	numberOfNotifications = 10_000
 )
 
 func main() {

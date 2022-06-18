@@ -7,7 +7,8 @@ import (
 )
 
 type Persistence interface {
-	InsertOnConflictNothing(ctx context.Context, notification *Notification, tx *WrappedTx) error
+	InsertOnConflictNothing(ctx context.Context, notification *Notification, tx *WrappedTx) (int64, error)
 	UpdateStatus(ctx context.Context, serverUUID uuid.UUID, status pgtype.Int2, tx *WrappedTx) error
 	GetForUpdate(ctx context.Context, serverUUID uuid.UUID, tx *WrappedTx) (*Notification, error)
+	Get(ctx context.Context, serverUUID uuid.UUID, tx *WrappedTx) (*Notification, error)
 }
