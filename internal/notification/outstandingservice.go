@@ -3,7 +3,6 @@ package notification
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"github.com/confluentinc/confluent-kafka-go/kafka"
 	"github.com/despondency/notifications-service/internal/storage"
 	"github.com/jackc/pgtype"
@@ -63,7 +62,7 @@ func (ous *OutstandingService) consumeNotificationOutstanding() {
 	maxReq := make(chan struct{}, outstandingNotificationsMax)
 	go func() {
 		for ous.stopped.Load() == false {
-			ev := ous.consumer.Poll(0)
+			ev := ous.consumer.Poll(1000)
 			switch e := ev.(type) {
 			case *kafka.Message:
 				maxReq <- struct{}{}
@@ -135,9 +134,6 @@ func (ous *OutstandingService) handleMsg(err error, ctx context.Context, outstan
 				return err
 			}
 		}
-	} else {
-		// skip since its already processed
-		log.Debug().Msg(fmt.Sprintf("skipping already processed notification %s", sv.UUID))
 	}
 	return err
 }

@@ -2,6 +2,14 @@
 
 #### This service pushes notifications to SMS/Slack/Email providers
 
+Requirements:
+
+```
+Kafka
+CockroachDB
+Docker
+Golang
+```
 
 #### How to run:
 ```
@@ -35,10 +43,8 @@ First of all to achieve Exactly Once End to End we need all parts of our system 
 
 #### Flow of messages
 
-1. Let's say that the Client is a Web/Mobile which has an inbuilt retry mechanism for posting to **/notifications** (Client generates UUID, so we can dedupe on it)
-2. We immediately after getting a notification we push it to **"received-notifications"** topic in Kafka
-3. We read from **"received-notifications"** and we persist the notification to **CockroachDB**, if such UUID already exists, we NoOp
-4. We push event to **"outstanding-notifications"** topic which signifies the final part of our process
+1. Let's say that the Client is a Web/Mobile which has an inbuilt **retry mechanism** for posting to **/notifications** (Client generates UUID, so we can dedupe on it)
+2. We immediately after getting a notification we persist it and we push outstanding notification to **outstanding-notifications** topic in Kafka
 5. We read from **"outstanding-notifications"** topic, we acquire **FOR UPDATE** lock on the DB row, we push the event to the particular provider and change status to **PROCESSED** of the notification, we commit the msg.
 
 #### Performance
@@ -46,5 +52,3 @@ First of all to achieve Exactly Once End to End we need all parts of our system 
 Extremely scalable. By adding more CockroachDB nodes/Kafka nodes you can scale in the millions of events/sec. A limitation would be amount of transactions you can open.
 However there is a way to fix that as well, batching kafka reads + batching Gets/Inserts to DB will scale the throughput immensely.
 
-
-I managed to achieve on a single Kafka, CockroachDB on my local machine with 64GB/16cores around 70-80K/sec with p99 in sub 20 millis

@@ -1,6 +1,7 @@
 package notification
 
 import (
+	"context"
 	"encoding/json"
 	"github.com/julienschmidt/httprouter"
 	"io"
@@ -8,7 +9,7 @@ import (
 )
 
 type InternalManager interface {
-	PushNotificationInternal(notification *Notification) error
+	HandleNotification(ctx context.Context, notification *Notification) error
 }
 
 type Endpoint struct {
@@ -36,7 +37,7 @@ func (e *Endpoint) CreateNotification(w http.ResponseWriter, r *http.Request, _ 
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
-	err = e.svc.PushNotificationInternal(n)
+	err = e.svc.HandleNotification(r.Context(), n)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 	} else {
