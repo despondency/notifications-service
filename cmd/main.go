@@ -36,6 +36,7 @@ type KafkaConfig struct {
 type DBConfig struct {
 	DBConnectString string `env:"DB_CONNECT_STRING"`
 	MigrationsPath  string `env:"MIGRATIONS_PATH"`
+	Port            int    `env:"PORT" default:"8090"`
 }
 
 func main() {
@@ -48,11 +49,19 @@ func main() {
 
 	runMigrations(cfg.DBConnectString)
 
-	connPool, err := pgxpool.Connect(ctx, cfg.DBConnectString)
-	if err != nil {
-		log.Panic().Err(err).Msg("could not create pooled connection to DB")
-	}
+	var connPool *pgxpool.Pool
 
+	err := backoff.Retry(func() error {
+		var err error
+		connPool, err = pgxpool.Connect(ctx, cfg.DBConnectString)
+		if err != nil {
+			return err
+		}
+		return nil
+	}, backoff.WithMaxRetries(backoff.NewExponentialBackOff(), 10))
+	if err != nil {
+		log.Panic().Err(err).Msg("cannot connect")
+	}
 	connPool.Config().MaxConns = 50
 	connPool.Config().MaxConnLifetime = time.Second * 60
 	connPool.Config().MinConns = 0
@@ -74,7 +83,7 @@ func main() {
 	}
 
 	ous := notification.NewOutstandingService(cfg.BootstrapServers, cfg.OutstandingGroupID, "earliest",
-		"false", cfg.OutstandingTopic,
+		"true", cfg.OutstandingTopic,
 		txCreator, pers, notifiers)
 
 	zerolog.TimeFieldFormat = zerolog.TimeFormatUnix
@@ -84,7 +93,7 @@ func main() {
 	router.POST("/notification", endpoint.CreateNotification)
 
 	srv := http.Server{
-		Addr:    ":8091",
+		Addr:    fmt.Sprintf(":%d", cfg.Port),
 		Handler: router,
 	}
 

@@ -7,17 +7,18 @@ import (
 	"fmt"
 	"github.com/despondency/notifications-service/internal/notification"
 	"github.com/google/uuid"
+	"math/rand"
 	"net/http"
 	"sync"
 	"time"
 )
 
 const (
-	numberOfNotifications = 1000
+	numberOfNotifications = 10000
 )
 
 func main() {
-	maxParallelism := make(chan struct{}, 25)
+	maxParallelism := make(chan struct{}, 100)
 	wg := sync.WaitGroup{}
 
 	n := make([][]byte, numberOfNotifications)
@@ -55,8 +56,8 @@ func createNotification(i int) []byte {
 }
 
 func sendNotification(buffer []byte) {
-	//n := rand.Intn(2)
-	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, fmt.Sprintf("http://localhost:809%d/notification", 1), bytes.NewBuffer(buffer))
+	n := rand.Intn(2)
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, fmt.Sprintf("http://localhost:809%d/notification", n), bytes.NewBuffer(buffer))
 	if err != nil {
 		panic(err)
 	}

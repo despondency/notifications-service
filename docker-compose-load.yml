@@ -1,0 +1,210 @@
+---
+version: '3.9'
+
+services:
+  notifications1:
+    hostname: notifications1
+    container_name: notifications1
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: notifications:1.0
+    environment:
+      - PORT=8090
+      - DB_CONNECT_STRING=postgres://root:@lb:26257/postgres?sslmode=disable
+      - INTERNAL_GROUP_ID=received-notifications-group-id
+      - INTERNAL_TOPIC=received-notifications
+      - KAFKA_BOOTSTRAP_SERVERS=kafka1:9093,kafka2:9093,kafka3:9093
+      - OUTSTANDING_GROUP_ID=outstanding-notifications-group-id
+      - OUTSTANDING_TOPIC=outstanding-notifications
+    ports:
+      - "8090:8090"
+    depends_on:
+      - crdb-0
+      - crdb-1
+      - crdb-2
+      - kafka1
+      - kafka2
+      - kafka3
+
+  notifications2:
+    hostname: notifications2
+    container_name: notifications2
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: notifications:1.0
+    environment:
+      - PORT=8091
+      - DB_CONNECT_STRING=postgres://root:@lb:26257/postgres?sslmode=disable
+      - INTERNAL_GROUP_ID=received-notifications-group-id
+      - INTERNAL_TOPIC=received-notifications
+      - KAFKA_BOOTSTRAP_SERVERS=kafka1:9093,kafka2:9093,kafka3:9093
+      - OUTSTANDING_GROUP_ID=outstanding-notifications-group-id
+      - OUTSTANDING_TOPIC=outstanding-notifications
+    ports:
+      - "8091:8091"
+    depends_on:
+      - crdb-0
+      - crdb-1
+      - crdb-2
+      - kafka1
+      - kafka2
+      - kafka3
+
+  notifications3:
+    hostname: notifications3
+    container_name: notifications3
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: notifications:1.0
+    environment:
+      - PORT=8092
+      - DB_CONNECT_STRING=postgres://root:@lb:26257/postgres?sslmode=disable
+      - INTERNAL_GROUP_ID=received-notifications-group-id
+      - INTERNAL_TOPIC=received-notifications
+      - KAFKA_BOOTSTRAP_SERVERS=kafka1:9093,kafka2:9093,kafka3:9093
+      - OUTSTANDING_GROUP_ID=outstanding-notifications-group-id
+      - OUTSTANDING_TOPIC=outstanding-notifications
+    ports:
+      - "8092:8092"
+    depends_on:
+      - crdb-0
+      - crdb-1
+      - crdb-2
+      - kafka1
+      - kafka2
+      - kafka3
+
+  zookeeper:
+    container_name: zookeeper
+    image: confluentinc/cp-zookeeper:7.0.1
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+
+  kafka1:
+      container_name: kafka1
+      hostname: kafka1
+      image: confluentinc/cp-kafka:7.0.1
+      depends_on:
+        - zookeeper
+      ports:
+        - 9092:9092
+      environment:
+        KAFKA_BROKER_ID: 1
+        KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+        KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka1:9093,PLAINTEXT_HOST://localhost:9092
+        KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+        KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+       # KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+
+  kafka2:
+    container_name: kafka2
+    hostname: kafka2
+    image: confluentinc/cp-kafka:7.0.1
+    depends_on:
+      - zookeeper
+    ports:
+      - 9094:9094
+    environment:
+      KAFKA_BROKER_ID: 2
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka2:9095,PLAINTEXT_HOST://localhost:9094
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      #KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+
+  kafka3:
+    container_name: kafka3
+    hostname: kafka3
+    image: confluentinc/cp-kafka:7.0.1
+    depends_on:
+      - zookeeper
+    ports:
+      - 9096:9096
+    environment:
+      KAFKA_BROKER_ID: 3
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka3:9097,PLAINTEXT_HOST://localhost:9096
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      #KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+
+
+  crdb-0:
+    container_name: crdb-0
+    hostname: crdb-0
+    image: cockroachdb/cockroach:latest
+    command: start --cluster-name=example-haproxy-with-init --logtostderr=WARNING --log-file-verbosity=WARNING --insecure --join=crdb-0
+
+  crdb-1:
+      container_name: crdb-1
+      hostname: crdb-1
+      image: cockroachdb/cockroach:latest
+      command: start --cluster-name=example-haproxy-with-init --logtostderr=WARNING --log-file-verbosity=WARNING --insecure --join=crdb-0
+      depends_on:
+        - crdb-0
+
+  crdb-2:
+      container_name: crdb-2
+      hostname: crdb-2
+      image: cockroachdb/cockroach:latest
+      command: start --cluster-name=example-haproxy-with-init --logtostderr=WARNING --log-file-verbosity=WARNING --insecure --join=crdb-0
+      depends_on:
+        - crdb-0
+
+  crdb-3:
+    container_name: crdb-3
+    hostname: crdb-3
+    image: cockroachdb/cockroach:latest
+    command: start --cluster-name=example-haproxy-with-init --logtostderr=WARNING --log-file-verbosity=WARNING --insecure --join=crdb-0
+    depends_on:
+      - crdb-0
+
+  crdb-4:
+    container_name: crdb-4
+    hostname: crdb-4
+    image: cockroachdb/cockroach:latest
+    command: start --cluster-name=example-haproxy-with-init --logtostderr=WARNING --log-file-verbosity=WARNING --insecure --join=crdb-0
+    depends_on:
+      - crdb-0
+
+  crdb-5:
+    container_name: crdb-5
+    hostname: crdb-5
+    image: cockroachdb/cockroach:latest
+    command: start --cluster-name=example-haproxy-with-init --logtostderr=WARNING --log-file-verbosity=WARNING --insecure --join=crdb-0
+    depends_on:
+      - crdb-0
+
+  lb:
+      container_name: lb
+      hostname: lb
+      image: timveil/dynamic-haproxy:latest
+      ports:
+        - "26257:26257"
+        - "8080:8080"
+        - "8081:8081"
+      environment:
+        - NODES=crdb-0 crdb-1 crdb-2 crdb-3 crdb-4 crdb-5
+      depends_on:
+        - crdb-0
+        - crdb-1
+        - crdb-2
+        - crdb-3
+        - crdb-4
+        - crdb-5
+
+  crdb-init:
+      container_name: crdb-init
+      hostname: crdb-init
+      image: timveil/cockroachdb-remote-client:latest
+      environment:
+        - COCKROACH_HOST=crdb-0:26257
+        - COCKROACH_INSECURE=true
+        - COCKROACH_INIT=true
+        - DATABASE_NAME=test
+      depends_on:
+        - lb
