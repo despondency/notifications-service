@@ -91,14 +91,14 @@ func (ous *OutstandingService) consumeNotificationOutstanding() {
 								log.Err(errRollback).Msg("could not rollback outstanding notification tx")
 							}
 						} else {
-							_, errCommitMsg := ous.consumer.CommitMessage(e)
-							if errCommitMsg != nil {
-								log.Err(errCommitMsg).Msg("could not commit outstanding notification msg")
-								return
-							}
 							errCommit := tx.Commit(ctx)
 							if errCommit != nil {
 								log.Err(errCommit).Msg("could not commit outstanding notification tx")
+								return
+							}
+							_, errCommitMsg := ous.consumer.CommitMessage(e)
+							if errCommitMsg != nil {
+								log.Err(errCommitMsg).Msg("could not commit outstanding notification msg")
 								return
 							}
 						}
