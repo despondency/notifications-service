@@ -2,11 +2,12 @@ package main
 
 import (
 	"bytes"
-	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"github.com/despondency/notifications-service/internal/notification"
 	"github.com/google/uuid"
+	"io/ioutil"
 	"math/rand"
 	"net/http"
 	"sync"
@@ -14,17 +15,21 @@ import (
 )
 
 const (
-	numberOfNotifications = 10_000
+	numberOfNotifications = 100_000
 )
 
+var client = &http.Client{Transport: &http.Transport{
+	TLSClientConfig: &tls.Config{
+		//InsecureSkipVerify: true,
+		//ServerName: "http://localhost:8090",
+	},
+	MaxIdleConnsPerHost: 250,
+}, Timeout: 60 * time.Second}
+
 func main() {
-	maxParallelism := make(chan struct{}, 100)
+	maxParallelism := make(chan struct{}, 500)
 	wg := sync.WaitGroup{}
 
-	n := make([][]byte, numberOfNotifications)
-	for i := 0; i < numberOfNotifications; i++ {
-		n[i] = createNotification(i)
-	}
 	t := time.Now()
 	for i := 0; i < numberOfNotifications; i++ {
 		v := i
@@ -35,38 +40,39 @@ func main() {
 				<-maxParallelism
 				wg.Done()
 			}()
-			sendNotification(n[idx])
+			sendNotification(idx)
 		}(v)
 	}
 	wg.Wait()
 	fmt.Printf(time.Since(t).String())
 }
 
-func createNotification(i int) []byte {
+func sendNotification(idx int) {
 	n := &notification.Notification{
 		UUID:            uuid.New().String(),
-		NotificationTxt: fmt.Sprintf("txt-%d", i),
+		NotificationTxt: fmt.Sprintf("txt-%d", idx),
 		Destination:     "EMAIL",
 	}
 	b, err := json.Marshal(n)
 	if err != nil {
 		panic(err)
 	}
-	return b
-}
-
-func sendNotification(buffer []byte) {
-	n := rand.Intn(2)
-	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, fmt.Sprintf("http://localhost:809%d/notification", n), bytes.NewBuffer(buffer))
+	rnd := rand.Intn(2)
+	req, err := http.NewRequest(http.MethodPost, fmt.Sprintf("http://localhost:809%d/notification", rnd), bytes.NewBuffer(b))
 	if err != nil {
 		panic(err)
 	}
 	req.Header.Set("Content-Type", "application/json")
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := client.Do(req)
 	if err != nil {
 		panic(err)
 	}
-	defer func() {
-		resp.Body.Close()
-	}()
+	resp.Body.Close()
+	req.Close = true
+	_, err = ioutil.ReadAll(resp.Body)
+	if err != nil {
+		fmt.Println("read body error", err.Error())
+		return
+	}
+	//fmt.Printf("response: %s\n", content)
 }

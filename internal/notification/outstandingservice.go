@@ -20,7 +20,7 @@ type OutstandingService struct {
 }
 
 const (
-	outstandingNotificationsMax = 1000
+	outstandingNotificationMaxGoRoutines = 10
 )
 
 func NewOutstandingService(
@@ -59,7 +59,7 @@ func (ous *OutstandingService) Stop() {
 	}
 }
 func (ous *OutstandingService) consumeNotificationOutstanding() {
-	maxReq := make(chan struct{}, outstandingNotificationsMax)
+	maxReq := make(chan struct{}, outstandingNotificationMaxGoRoutines)
 	go func() {
 		for ous.stopped.Load() == false {
 			ev := ous.consumer.Poll(1000)

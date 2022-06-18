@@ -32,6 +32,8 @@ type KafkaConfig struct {
 	BootstrapServers   string `env:"KAFKA_BOOTSTRAP_SERVERS"`
 	OutstandingGroupID string `env:"OUTSTANDING_GROUP_ID"`
 	OutstandingTopic   string `env:"OUTSTANDING_TOPIC"`
+	InternalGroupID    string `env:"INTERNAL_GROUP_ID"`
+	InternalTopic      string `env:"INTERNAL_TOPIC"`
 }
 
 type DBConfig struct {
@@ -69,13 +71,21 @@ func main() {
 
 	txCreator := storage.NewWrappedTransactionCreator(connPool)
 
+	internalKafkaProducer, err :=
+		messaging.NewKafkaProducer(cfg.BootstrapServers, cfg.InternalTopic, "notifications-service", "all")
+	if err != nil {
+		log.Panic().Err(err).Msg("cannot create kafka internal producer")
+	}
+
 	outstandingKafkaProducer, err :=
 		messaging.NewKafkaProducer(cfg.BootstrapServers, cfg.OutstandingTopic, "notifications-service", "1")
 	if err != nil {
 		log.Panic().Err(err).Msg("cannot create kafka internal consumer")
 	}
 
-	is := notification.NewInternalService(outstandingKafkaProducer, txCreator, pers)
+	is := notification.NewInternalService(cfg.BootstrapServers, cfg.InternalGroupID, "earliest",
+		cfg.InternalTopic, "false",
+		internalKafkaProducer, outstandingKafkaProducer, txCreator, pers)
 
 	notifiers := &notification.DelegatingNotificator{
 		Notificators: []notification.Notificator{&notification.SMSNotificator{}, &notification.EmailNotificator{}, &notification.SlackNotificator{}},
@@ -107,6 +117,8 @@ func main() {
 			// Error from closing listeners, or context timeout:
 			log.Printf("HTTP server Shutdown: %v", err)
 		}
+		is.Stop()
+		internalKafkaProducer.Stop()
 		ous.Stop()
 		connPool.Close()
 		close(wait)
