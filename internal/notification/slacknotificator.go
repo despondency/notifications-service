@@ -11,7 +11,7 @@ type SlackNotificator struct {
 
 func (sn *SlackNotificator) Send(txt string) error {
 	// business logic regarding slack notifications
-	log.Info().Msg(fmt.Sprintf("Sent an Slack Notification with txt %s", txt))
+	log.Info().Msg(fmt.Sprintf("Sent an Slack NotificationRequest with txt %s", txt))
 	return nil
 }
 

@@ -49,7 +49,7 @@ func NewInternalService(bootstrapServers, receivedNotificationsGroupID, resetOff
 	return is
 }
 
-func (s *InternalService) PushNotificationInternal(n *Notification) error {
+func (s *InternalService) PushNotificationInternal(n *Request) error {
 	dest, err := toServerNotificationDestination(n.Destination)
 	if err != nil {
 		log.Err(err).Msg(fmt.Sprintf("destination conversion to server notification destination failed, original destination is %s", n.Destination))
@@ -75,11 +75,11 @@ func (s *InternalService) Stop() {
 	s.stopped.Store(true)
 	_, err := s.consumer.Commit()
 	if err != nil {
-		log.Err(err).Msg("could not commit consumer while stopping in internal service")
+		log.Err(err).Msg("could not commit consumer while stopping in internal notifications")
 	}
 	err = s.consumer.Close()
 	if err != nil {
-		log.Err(err).Msg("could not close consumer while stopping in internal service")
+		log.Err(err).Msg("could not close consumer while stopping in internal notifications")
 	}
 }
 
@@ -87,7 +87,7 @@ func (s *InternalService) consumeNotificationInternal() {
 	maxReq := make(chan struct{}, s.maxRoutines)
 	go func() {
 		for s.stopped.Load() == false {
-			ev := s.consumer.Poll(0)
+			ev := s.consumer.Poll(100) // release CPU quota 100ms
 			switch e := ev.(type) {
 			case *kafka.Message:
 				maxReq <- struct{}{}
@@ -107,7 +107,6 @@ func (s *InternalService) consumeNotificationInternal() {
 				// maybe fatal here?
 				// its unrecoverable
 			default:
-				//fmt.Printf("Ignored %v\n", e)
 			}
 		}
 	}()

@@ -3,6 +3,7 @@ package notification
 import (
 	"fmt"
 	"github.com/google/uuid"
+	"strings"
 	"time"
 )
 
@@ -24,7 +25,8 @@ const (
 )
 
 func toServerNotificationDestination(destination string) (Destination, error) {
-	switch destination {
+	destinationUpper := strings.ToUpper(destination)
+	switch destinationUpper {
 	case "SMS":
 		return 0, nil
 	case "EMAIL":
@@ -47,7 +49,7 @@ type OutstandingNotification struct {
 	UUID uuid.UUID `json:"uuid"`
 }
 
-type Notification struct {
+type Request struct {
 	UUID            string `json:"uuid"`
 	NotificationTxt string `json:"txt"`
 	Destination     string `json:"destination"`

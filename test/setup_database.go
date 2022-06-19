@@ -1,53 +1,21 @@
-package integration
+package test
 
 import (
 	"context"
 	"fmt"
-	"github.com/caarlos0/env/v6"
 	"github.com/cenkalti/backoff/v4"
 	"github.com/despondency/notifications-service/internal/storage"
 	"github.com/golang-migrate/migrate/v4"
-	"github.com/google/uuid"
+	_ "github.com/golang-migrate/migrate/v4/database/cockroachdb"
+	_ "github.com/golang-migrate/migrate/v4/source/file"
 	"github.com/jackc/pgx/v4/pgxpool"
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
 	"github.com/rs/zerolog/log"
 	"strings"
-	"testing"
 	"time"
 )
 
-func TestBooks(t *testing.T) {
-	RegisterFailHandler(Fail)
-	RunSpecs(t, "Integration Suite")
-}
-
-type TestConfig struct {
-	NodeHost        string `env:"NODE_HOST" envDefault:"http://localhost:8090"`
-	DBConnectString string `env:"DB_CONNECT_STRING" envDefault:"postgres://root:@localhost:26257/postgres?sslmode=disable"`
-	MigrationsPath  string `env:"MIGRATIONS_PATH" envDefault:"../../migrations"`
-}
-
-var (
-	cfg       TestConfig
-	connPool  *pgxpool.Pool
-	store     Persistence
-	txCreator *storage.WrappedTxCreator
-)
-
-type Persistence interface {
-	Get(ctx context.Context, serverUUID uuid.UUID, tx *storage.WrappedTx) (*storage.Notification, error)
-}
-
-var _ = BeforeSuite(func() {
-	SetDefaultEventuallyPollingInterval(time.Second * 1)
-	SetDefaultEventuallyTimeout(time.Second * 120)
-
-	ctx := context.Background()
-	cfg = TestConfig{}
-	if err := env.Parse(&cfg); err != nil {
-		panic(err)
-	}
+func SetupDatabase(cfg *Config, ctx context.Context) (*pgxpool.Pool, *storage.CRDBPersistence) {
+	var connPool *pgxpool.Pool
 	err := backoff.Retry(func() error {
 		var err error
 		connPool, err = pgxpool.Connect(ctx, cfg.DBConnectString)
@@ -59,15 +27,15 @@ var _ = BeforeSuite(func() {
 	if err != nil {
 		log.Panic().Err(err).Msg("cannot connect")
 	}
-	runMigrations(cfg.DBConnectString, cfg.MigrationsPath)
-
 	connPool.Config().MaxConns = 3
 	connPool.Config().MaxConnLifetime = time.Second * 60
 	connPool.Config().MinConns = 0
 
-	store = storage.NewCRDBPersistence(connPool)
-	txCreator = storage.NewWrappedTransactionCreator(connPool)
-})
+	runMigrations(cfg.DBConnectString, cfg.MigrationsPath)
+
+	store := storage.NewCRDBPersistence(connPool)
+	return connPool, store
+}
 
 func runMigrations(dbConnectString, migrationPath string) {
 	crdbMigrationString := strings.Replace(dbConnectString, "postgres", "cockroachdb", 1)

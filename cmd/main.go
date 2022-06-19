@@ -72,13 +72,13 @@ func main() {
 	pers := storage.NewCRDBPersistence(connPool)
 
 	internalKafkaProducer, err :=
-		messaging.NewKafkaProducer(cfg.BootstrapServers, cfg.InternalTopic, "notifications-service", "all")
+		messaging.NewKafkaProducer(cfg.BootstrapServers, cfg.InternalTopic, "notifications-notifications", "all")
 	if err != nil {
 		log.Panic().Err(err).Msg("cannot create kafka internal producer")
 	}
 
 	outstandingKafkaProducer, err :=
-		messaging.NewKafkaProducer(cfg.BootstrapServers, cfg.OutstandingTopic, "notifications-service", "1")
+		messaging.NewKafkaProducer(cfg.BootstrapServers, cfg.OutstandingTopic, "notifications-notifications", "1")
 	if err != nil {
 		log.Panic().Err(err).Msg("cannot create kafka internal consumer")
 	}
@@ -129,7 +129,7 @@ func main() {
 			log.Fatal().Err(err).Msg(fmt.Sprintf("HTTP server ListenAndServe"))
 		}
 	}()
-	log.Info().Msg(fmt.Sprintf("notifications service started at port %d", cfg.Port))
+	log.Info().Msg(fmt.Sprintf("notifications notifications started at port %d", cfg.Port))
 
 	<-wait
 }

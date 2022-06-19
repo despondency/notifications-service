@@ -9,7 +9,7 @@ import (
 )
 
 type InternalManager interface {
-	PushNotificationInternal(notification *Notification) error
+	PushNotificationInternal(notification *Request) error
 }
 
 type Endpoint struct {
@@ -32,7 +32,7 @@ func (e *Endpoint) CreateNotification(w http.ResponseWriter, r *http.Request, _ 
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
-	n := &Notification{}
+	n := &Request{}
 	err = json.Unmarshal(b, n)
 	if err != nil {
 		log.Err(err).Msg("error while unmarshalling")

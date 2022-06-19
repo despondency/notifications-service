@@ -67,9 +67,9 @@ func (crdbp *CRDBPersistence) GetForUpdate(ctx context.Context, serverUUID uuid.
 	return notification, nil
 }
 
-func (crdbp *CRDBPersistence) Get(ctx context.Context, serverUUID uuid.UUID, tx pgx.Tx) (*Notification, error) {
+func (crdbp *CRDBPersistence) Get(ctx context.Context, notifUUID uuid.UUID, tx pgx.Tx) (*Notification, error) {
+	r := tx.QueryRow(ctx, "SELECT uuid, txt, status, destination, server_timestamp, last_updated FROM notifications WHERE uuid = $1", notifUUID)
 	notification := &Notification{}
-	r := tx.QueryRow(ctx, "SELECT uuid, txt, status, destination, server_timestamp, last_updated FROM notifications WHERE uuid = $1", serverUUID)
 	errScan := r.Scan(&notification.UUID, &notification.Txt, &notification.Status, &notification.Dest, &notification.ServerTimestamp, &notification.LastUpdated)
 	if errScan != nil {
 		return nil, errScan

@@ -11,7 +11,7 @@ type SMSNotificator struct {
 
 func (smsn *SMSNotificator) Send(txt string) error {
 	// business logic regarding sms notifications
-	log.Info().Msg(fmt.Sprintf("Sent an SMS Notification with txt %s", txt))
+	log.Info().Msg(fmt.Sprintf("Sent an SMS NotificationRequest with txt %s", txt))
 	return nil
 }
 

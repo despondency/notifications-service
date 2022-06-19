@@ -1,10 +1,11 @@
-package integration
+package notifications_test
 
 import (
 	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/cockroachdb/cockroach-go/v2/crdb/crdbpgx"
 	"github.com/despondency/notifications-service/internal/notification"
 	"github.com/despondency/notifications-service/internal/storage"
 	_ "github.com/golang-migrate/migrate/v4/database/cockroachdb"
@@ -17,22 +18,21 @@ import (
 )
 
 var (
-	notifs []*notification.Notification
-	err    error
+	notifications []*notification.Request
 )
 
-var _ = Describe("Push Notification Test", func() {
+var _ = Describe("Push NotificationRequest Test", func() {
 
 	JustBeforeEach(func() {
-		for _, n := range notifs {
+		for _, n := range notifications {
 			sendNotification(n)
 		}
 	})
 
-	Context("Create Email Notification and push it", func() {
+	Context("Create Email NotificationRequest and push it", func() {
 		BeforeEach(func() {
-			notifs = make([]*notification.Notification, 0)
-			notifs = append(notifs, &notification.Notification{
+			notifications = make([]*notification.Request, 0)
+			notifications = append(notifications, &notification.Request{
 				UUID:            uuid.New().String(),
 				NotificationTxt: fmt.Sprintf("%s-%s", "TEST", uuid.New().String()),
 				Destination:     "EMAIL",
@@ -40,15 +40,14 @@ var _ = Describe("Push Notification Test", func() {
 		})
 
 		It("should push the notification successfully", func() {
-			Expect(err).To(BeNil())
 			Eventually(CheckNotifications).Should(Equal(true))
 		})
 	})
 
-	Context("Create SMS Notification and push it", func() {
+	Context("Create SMS NotificationRequest and push it", func() {
 		BeforeEach(func() {
-			notifs = make([]*notification.Notification, 0)
-			notifs = append(notifs, &notification.Notification{
+			notifications = make([]*notification.Request, 0)
+			notifications = append(notifications, &notification.Request{
 				UUID:            uuid.New().String(),
 				NotificationTxt: fmt.Sprintf("%s-%s", "TEST", uuid.New().String()),
 				Destination:     "SMS",
@@ -56,15 +55,14 @@ var _ = Describe("Push Notification Test", func() {
 		})
 
 		It("should push the notification successfully", func() {
-			Expect(err).To(BeNil())
 			Eventually(CheckNotifications).Should(Equal(true))
 		})
 	})
 
-	Context("Create Slack Notification and push it", func() {
+	Context("Create Slack NotificationRequest and push it", func() {
 		BeforeEach(func() {
-			notifs = make([]*notification.Notification, 0)
-			notifs = append(notifs, &notification.Notification{
+			notifications = make([]*notification.Request, 0)
+			notifications = append(notifications, &notification.Request{
 				UUID:            uuid.New().String(),
 				NotificationTxt: fmt.Sprintf("%s-%s", "TEST", uuid.New().String()),
 				Destination:     "SLACK",
@@ -72,16 +70,15 @@ var _ = Describe("Push Notification Test", func() {
 		})
 
 		It("should push the notification successfully", func() {
-			Expect(err).To(BeNil())
 			Eventually(CheckNotifications).Should(Equal(true))
 		})
 	})
 
-	Context("Create 100 notification and push it", func() {
+	Context("Create 100 notification and push them", func() {
 		BeforeEach(func() {
-			notifs = make([]*notification.Notification, 100)
+			notifications = make([]*notification.Request, 100)
 			for i := 0; i < 100; i++ {
-				notifs[i] = &notification.Notification{
+				notifications[i] = &notification.Request{
 					UUID:            uuid.New().String(),
 					NotificationTxt: fmt.Sprintf("%s-%s", "TEST", uuid.New().String()),
 					Destination:     "EMAIL",
@@ -89,43 +86,40 @@ var _ = Describe("Push Notification Test", func() {
 			}
 		})
 
-		It("should push the notification successfully", func() {
-			Expect(err).To(BeNil())
+		It("should push the notifications successfully", func() {
 			Eventually(CheckNotifications).Should(Equal(true))
 		})
 	})
-
 })
 
 func CheckNotifications() bool {
-	successfulNotifs := map[uuid.UUID]struct{}{}
-	for _, n := range notifs {
+	storedNotifications := make([]*storage.Notification, len(notifications))
+	for i, n := range notifications {
 		ctx := context.Background()
-		var tx *storage.WrappedTx
-		tx, err = txCreator.NewTx(ctx, pgx.TxOptions{})
-		if err != nil {
+		var storedNotification *storage.Notification
+		err := crdbpgx.ExecuteTx(ctx, connPool, pgx.TxOptions{}, func(tx pgx.Tx) error {
+			var errGet error
+			storedNotification, errGet = store.Get(ctx, uuid.MustParse(n.UUID), tx)
+			return errGet
+		})
+		if err != nil && err.Error() == "no rows in result set" {
+			return false
+		} else if err != nil && err.Error() != "no rows in result set" {
+			// this deserves a panic
 			panic(err)
 		}
-		var storedNotif *storage.Notification
-		storedNotif, err = store.Get(ctx, uuid.MustParse(n.UUID), tx)
-		if err != nil {
-			panic(err)
+		if storedNotification.Status.Int != int16(notification.PROCESSED) {
+			return false
 		}
-		if storedNotif.Status.Int == int16(notification.PROCESSED) {
-			successfulNotifs[storedNotif.UUID] = struct{}{}
-		}
-		err = tx.Commit(ctx)
-		if err != nil {
-			panic(err)
-		}
+		storedNotifications[i] = storedNotification
 	}
-	if len(successfulNotifs) == len(notifs) {
+	if len(storedNotifications) == len(notifications) {
 		return true
 	}
 	return false
 }
 
-func sendNotification(n *notification.Notification) {
+func sendNotification(n *notification.Request) {
 	b, err := json.Marshal(n)
 	if err != nil {
 		panic(err)

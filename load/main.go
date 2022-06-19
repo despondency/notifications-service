@@ -8,20 +8,18 @@ import (
 	"github.com/despondency/notifications-service/internal/notification"
 	"github.com/google/uuid"
 	"io/ioutil"
+	"math/rand"
 	"net/http"
 	"sync"
 	"time"
 )
 
 const (
-	numberOfNotifications = 10_000
+	numberOfNotifications = 100_000
 )
 
 var client = &http.Client{Transport: &http.Transport{
-	TLSClientConfig: &tls.Config{
-		//InsecureSkipVerify: true,
-		//ServerName: "http://localhost:8090",
-	},
+	TLSClientConfig:     &tls.Config{},
 	MaxIdleConnsPerHost: 250,
 }, Timeout: 60 * time.Second}
 
@@ -47,7 +45,7 @@ func main() {
 }
 
 func sendNotification(idx int) {
-	n := &notification.Notification{
+	n := &notification.Request{
 		UUID:            uuid.New().String(),
 		NotificationTxt: fmt.Sprintf("txt-%d", idx),
 		Destination:     "EMAIL",
@@ -56,8 +54,8 @@ func sendNotification(idx int) {
 	if err != nil {
 		panic(err)
 	}
-	//	rnd := rand.Intn(2)
-	req, err := http.NewRequest(http.MethodPost, fmt.Sprintf("http://localhost:809%d/notification", 0), bytes.NewBuffer(b))
+	rnd := rand.Intn(2)
+	req, err := http.NewRequest(http.MethodPost, fmt.Sprintf("http://localhost:809%d/notification", rnd), bytes.NewBuffer(b))
 	if err != nil {
 		panic(err)
 	}

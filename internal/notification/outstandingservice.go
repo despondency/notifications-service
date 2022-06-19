@@ -47,18 +47,18 @@ func (ous *OutstandingService) Stop() {
 	ous.stopped.Store(true)
 	_, err := ous.consumer.Commit()
 	if err != nil {
-		log.Err(err).Msg("could not commit consumer while stopping in outstanding service")
+		log.Err(err).Msg("could not commit consumer while stopping in outstanding notifications")
 	}
 	err = ous.consumer.Close()
 	if err != nil {
-		log.Err(err).Msg("could not close consumer while stopping in outstanding service")
+		log.Err(err).Msg("could not close consumer while stopping in outstanding notifications")
 	}
 }
 func (ous *OutstandingService) consumeNotificationOutstanding() {
 	maxReq := make(chan struct{}, ous.maxRoutines)
 	go func() {
 		for ous.stopped.Load() == false {
-			ev := ous.consumer.Poll(0)
+			ev := ous.consumer.Poll(100) // release CPU quota 100ms
 			switch e := ev.(type) {
 			case *kafka.Message:
 				maxReq <- struct{}{}
@@ -107,15 +107,11 @@ func (ous *OutstandingService) handleMsg(ctx context.Context, outstandingNotific
 			})
 			if errSend != nil {
 				return err
-			} else {
-				err = ous.persistence.UpdateStatus(ctx, outstandingNotification.UUID, pgtype.Int2{
-					Int:    int16(PROCESSED),
-					Status: pgtype.Present,
-				}, tx)
-				if err != nil {
-					return err
-				}
 			}
+			return ous.persistence.UpdateStatus(ctx, outstandingNotification.UUID, pgtype.Int2{
+				Int:    int16(PROCESSED),
+				Status: pgtype.Present,
+			}, tx)
 		}
 		return nil
 	})
