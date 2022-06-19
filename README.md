@@ -23,6 +23,7 @@ make run-local
 
 #### Run integrations:
 ```
+make run-local
 make integration-tests
 ```
 
