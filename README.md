@@ -49,7 +49,7 @@ make generate
 ```
 curl -X POST -H "Content-Type: application/json" \
     -d '{"txt": "Kole Poluchi li", "destination": "EMAIL", "uuid": "8f58c11d-ebc2-4ca7-a934-226e2bb6192c"}' \
-    http://localhost:8091/notification
+    http://localhost:8090/notification
 ```
 
 #### Points to improve further:
