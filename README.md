@@ -5,6 +5,7 @@
 Requirements:
 
 ```
+makefile
 docker
 go
 golangci-lint
@@ -94,6 +95,6 @@ Since we can do offline processing on the notifications, we can trade eventual c
 The application will eventually send all notifications, but the producer of the notifications (Client) will have super low latency.
 On my 64GB/16 core machine, running the load-test containers + load main.go I get around 70K/notifications per second on the RECEIVING side, and around 4-5-6K/sec processing them.
 
-Extremely scalable. By adding more CockroachDB nodes/Kafka nodes you can scale in a LOT. A limitation would be amount of transactions you can open.
+Extremely scalable. By adding more CockroachDB nodes/Kafka nodes you can scale out a LOT. A limitation would be amount of transactions you can open.
 However there is a way to fix that as well, batching kafka reads + batching Gets/Inserts to DB will scale the throughput immensely. See Points To Improve (**4**)
 
