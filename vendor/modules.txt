@@ -1,0 +1,158 @@
+# github.com/caarlos0/env/v6 v6.9.3
+## explicit; go 1.17
+github.com/caarlos0/env/v6
+# github.com/cenkalti/backoff/v4 v4.1.3
+## explicit; go 1.13
+github.com/cenkalti/backoff/v4
+# github.com/cockroachdb/cockroach-go/v2 v2.2.13
+## explicit; go 1.13
+github.com/cockroachdb/cockroach-go/v2/crdb
+github.com/cockroachdb/cockroach-go/v2/crdb/crdbpgx
+# github.com/confluentinc/confluent-kafka-go v1.8.2
+## explicit
+github.com/confluentinc/confluent-kafka-go/kafka
+github.com/confluentinc/confluent-kafka-go/kafka/librdkafka_vendor
+# github.com/golang-migrate/migrate/v4 v4.15.2
+## explicit; go 1.16
+github.com/golang-migrate/migrate/v4
+github.com/golang-migrate/migrate/v4/database
+github.com/golang-migrate/migrate/v4/database/cockroachdb
+github.com/golang-migrate/migrate/v4/internal/url
+github.com/golang-migrate/migrate/v4/source
+github.com/golang-migrate/migrate/v4/source/file
+github.com/golang-migrate/migrate/v4/source/iofs
+# github.com/golang/mock v1.6.0
+## explicit; go 1.11
+github.com/golang/mock/gomock
+# github.com/google/uuid v1.3.0
+## explicit
+github.com/google/uuid
+# github.com/hashicorp/errwrap v1.1.0
+## explicit
+github.com/hashicorp/errwrap
+# github.com/hashicorp/go-multierror v1.1.1
+## explicit; go 1.13
+github.com/hashicorp/go-multierror
+# github.com/jackc/chunkreader/v2 v2.0.1
+## explicit; go 1.12
+github.com/jackc/chunkreader/v2
+# github.com/jackc/pgconn v1.12.1
+## explicit; go 1.12
+github.com/jackc/pgconn
+github.com/jackc/pgconn/internal/ctxwatch
+github.com/jackc/pgconn/stmtcache
+# github.com/jackc/pgio v1.0.0
+## explicit; go 1.12
+github.com/jackc/pgio
+# github.com/jackc/pgpassfile v1.0.0
+## explicit; go 1.12
+github.com/jackc/pgpassfile
+# github.com/jackc/pgproto3/v2 v2.3.0
+## explicit; go 1.12
+github.com/jackc/pgproto3/v2
+# github.com/jackc/pgservicefile v0.0.0-20200714003250-2b9c44734f2b
+## explicit; go 1.14
+github.com/jackc/pgservicefile
+# github.com/jackc/pgtype v1.11.0
+## explicit; go 1.13
+github.com/jackc/pgtype
+# github.com/jackc/pgx/v4 v4.16.1
+## explicit; go 1.13
+github.com/jackc/pgx/v4
+github.com/jackc/pgx/v4/internal/sanitize
+github.com/jackc/pgx/v4/pgxpool
+# github.com/jackc/puddle v1.2.1
+## explicit; go 1.12
+github.com/jackc/puddle
+# github.com/julienschmidt/httprouter v1.3.0
+## explicit; go 1.7
+github.com/julienschmidt/httprouter
+# github.com/lib/pq v1.10.6
+## explicit; go 1.13
+github.com/lib/pq
+github.com/lib/pq/oid
+github.com/lib/pq/scram
+# github.com/mattn/go-colorable v0.1.12
+## explicit; go 1.13
+github.com/mattn/go-colorable
+# github.com/mattn/go-isatty v0.0.14
+## explicit; go 1.12
+github.com/mattn/go-isatty
+# github.com/onsi/ginkgo/v2 v2.1.4
+## explicit; go 1.18
+github.com/onsi/ginkgo/v2
+github.com/onsi/ginkgo/v2/config
+github.com/onsi/ginkgo/v2/formatter
+github.com/onsi/ginkgo/v2/internal
+github.com/onsi/ginkgo/v2/internal/global
+github.com/onsi/ginkgo/v2/internal/interrupt_handler
+github.com/onsi/ginkgo/v2/internal/parallel_support
+github.com/onsi/ginkgo/v2/internal/testingtproxy
+github.com/onsi/ginkgo/v2/reporters
+github.com/onsi/ginkgo/v2/types
+# github.com/onsi/gomega v1.19.0
+## explicit; go 1.18
+github.com/onsi/gomega
+github.com/onsi/gomega/format
+github.com/onsi/gomega/internal
+github.com/onsi/gomega/internal/gutil
+github.com/onsi/gomega/matchers
+github.com/onsi/gomega/matchers/support/goraph/bipartitegraph
+github.com/onsi/gomega/matchers/support/goraph/edge
+github.com/onsi/gomega/matchers/support/goraph/node
+github.com/onsi/gomega/matchers/support/goraph/util
+github.com/onsi/gomega/types
+# github.com/rs/zerolog v1.27.0
+## explicit; go 1.15
+github.com/rs/zerolog
+github.com/rs/zerolog/internal/cbor
+github.com/rs/zerolog/internal/json
+github.com/rs/zerolog/log
+# github.com/stretchr/testify v1.7.1
+## explicit; go 1.13
+# go.uber.org/atomic v1.9.0
+## explicit; go 1.13
+go.uber.org/atomic
+# golang.org/x/crypto v0.0.0-20220525230936-793ad666bf5e
+## explicit; go 1.17
+golang.org/x/crypto/pbkdf2
+# golang.org/x/net v0.0.0-20220225172249-27dd8689420f
+## explicit; go 1.17
+golang.org/x/net/html
+golang.org/x/net/html/atom
+golang.org/x/net/html/charset
+# golang.org/x/sys v0.0.0-20220615213510-4f61da869c0c
+## explicit; go 1.17
+golang.org/x/sys/internal/unsafeheader
+golang.org/x/sys/unix
+# golang.org/x/text v0.3.7
+## explicit; go 1.17
+golang.org/x/text/cases
+golang.org/x/text/encoding
+golang.org/x/text/encoding/charmap
+golang.org/x/text/encoding/htmlindex
+golang.org/x/text/encoding/internal
+golang.org/x/text/encoding/internal/identifier
+golang.org/x/text/encoding/japanese
+golang.org/x/text/encoding/korean
+golang.org/x/text/encoding/simplifiedchinese
+golang.org/x/text/encoding/traditionalchinese
+golang.org/x/text/encoding/unicode
+golang.org/x/text/internal
+golang.org/x/text/internal/language
+golang.org/x/text/internal/language/compact
+golang.org/x/text/internal/tag
+golang.org/x/text/internal/utf8internal
+golang.org/x/text/language
+golang.org/x/text/runes
+golang.org/x/text/secure/bidirule
+golang.org/x/text/secure/precis
+golang.org/x/text/transform
+golang.org/x/text/unicode/bidi
+golang.org/x/text/unicode/norm
+golang.org/x/text/width
+# gopkg.in/yaml.v2 v2.4.0
+## explicit; go 1.15
+gopkg.in/yaml.v2
+# gopkg.in/yaml.v3 v3.0.0-20220512140231-539c8e751b99
+## explicit
