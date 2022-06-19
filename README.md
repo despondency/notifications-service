@@ -38,6 +38,12 @@ make run-load
 ```
 head to  ./load/main.go and choose number of notifications and go routines to push 
 
+#### Generate mocks
+```
+go install github.com/golang/mock/mockgen@v1.6.0
+make generate
+```
+
 
 #### Request to try the notifications service:
 ```

@@ -30,7 +30,7 @@ func (crdbp *CRDBPersistence) GetPool() *pgxpool.Pool {
 	return crdbp.connPool
 }
 
-func (crdbp *CRDBPersistence) InsertOnConflictNothing(ctx context.Context, notification *Notification, tx pgx.Tx) (int64, error) {
+func (crdbp *CRDBPersistence) InsertIfNotExists(ctx context.Context, notification *Notification, tx pgx.Tx) (int64, error) {
 	dbNotificationModel := toDBNotification(notification)
 	v, errExec := tx.Exec(ctx,
 		"INSERT into notifications(uuid, txt, destination, server_timestamp, last_updated) "+

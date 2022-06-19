@@ -20,7 +20,7 @@ var (
 	notifications []*notification.Request
 )
 
-var _ = Describe("Push NotificationRequest Test", func() {
+var _ = Describe("Notifications", func() {
 
 	JustBeforeEach(func() {
 		for _, n := range notifications {

@@ -89,7 +89,7 @@ func (ous *OutstandingService) handleMsg(ctx context.Context, msg *kafka.Message
 		return errUnmarshall
 	}
 	err := crdbpgx.ExecuteTx(ctx, ous.persistence.GetPool(), pgx.TxOptions{}, func(tx pgx.Tx) error {
-		affected, err := ous.persistence.InsertOnConflictNothing(ctx, serverNotification, tx)
+		affected, err := ous.persistence.InsertIfNotExists(ctx, serverNotification, tx)
 		if err != nil {
 			return err
 		}

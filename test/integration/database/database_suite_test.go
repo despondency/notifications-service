@@ -13,7 +13,7 @@ import (
 
 func TestDatabase(t *testing.T) {
 	RegisterFailHandler(Fail)
-	RunSpecs(t, "Database Suite")
+	RunSpecs(t, "Database")
 }
 
 var (

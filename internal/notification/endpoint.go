@@ -8,6 +8,7 @@ import (
 	"net/http"
 )
 
+//go:generate mockgen -source endpoint.go -destination ./notificationmocks/internalservice_mock.go -package notificationmocks
 type InternalManager interface {
 	PushNotificationInternal(notification *Request) error
 }

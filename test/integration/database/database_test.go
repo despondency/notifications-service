@@ -33,7 +33,7 @@ var _ = Describe("Database", func() {
 		JustBeforeEach(func() {
 			err = crdbpgx.ExecuteTx(context.Background(), connPool, pgx.TxOptions{}, func(tx pgx.Tx) error {
 				var errInsert error
-				affected, errInsert = store.InsertOnConflictNothing(context.Background(), toInsert, tx)
+				affected, errInsert = store.InsertIfNotExists(context.Background(), toInsert, tx)
 				return errInsert
 			})
 		})

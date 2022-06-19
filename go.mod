@@ -8,6 +8,7 @@ require (
 	github.com/cockroachdb/cockroach-go/v2 v2.2.13
 	github.com/confluentinc/confluent-kafka-go v1.8.2
 	github.com/golang-migrate/migrate/v4 v4.15.2
+	github.com/golang/mock v1.6.0
 	github.com/google/uuid v1.3.0
 	github.com/jackc/pgtype v1.11.0
 	github.com/jackc/pgx/v4 v4.16.1
