@@ -22,16 +22,19 @@ type OutstandingService struct {
 
 func NewOutstandingService(
 	bootstrapServers, outstandingGroupID, autoResetOffset, enableAutoCommit, outstandingNotificationsTopic string, persistence *storage.CRDBPersistence,
-	notificator *DelegatingNotificator, maxRoutines int) *OutstandingService {
+	notificator *DelegatingNotificator, maxRoutines int) (*OutstandingService, error) {
 	consumer, err := kafka.NewConsumer(&kafka.ConfigMap{
 		"bootstrap.servers":  bootstrapServers,
 		"group.id":           outstandingGroupID,
 		"auto.offset.reset":  autoResetOffset,
 		"enable.auto.commit": enableAutoCommit})
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 	err = consumer.Subscribe(outstandingNotificationsTopic, nil)
+	if err != nil {
+		return nil, err
+	}
 	ous := &OutstandingService{
 		consumer:    consumer,
 		persistence: persistence,
@@ -40,7 +43,7 @@ func NewOutstandingService(
 		stopped:     atomic.NewBool(false),
 	}
 	ous.consumeNotificationOutstanding()
-	return ous
+	return ous, nil
 }
 
 func (ous *OutstandingService) Stop() {
@@ -85,8 +88,7 @@ func (ous *OutstandingService) consumeNotificationOutstanding() {
 					}
 				}()
 			case kafka.Error:
-				// maybe fatal here?
-				// usually this indicates unrecoverable error
+				log.Err(e).Msg("kafka produced an error in outstanding service")
 			default:
 			}
 		}

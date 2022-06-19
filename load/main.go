@@ -15,7 +15,8 @@ import (
 )
 
 const (
-	numberOfNotifications = 100_000
+	numberOfNotifications   = 50_000
+	numberOfPushingRoutines = 500
 )
 
 var client = &http.Client{Transport: &http.Transport{
@@ -24,7 +25,7 @@ var client = &http.Client{Transport: &http.Transport{
 }, Timeout: 60 * time.Second}
 
 func main() {
-	maxParallelism := make(chan struct{}, 500)
+	maxParallelism := make(chan struct{}, numberOfPushingRoutines)
 	wg := sync.WaitGroup{}
 
 	t := time.Now()

@@ -26,17 +26,19 @@ type InternalService struct {
 }
 
 func NewInternalService(bootstrapServers, receivedNotificationsGroupID, resetOffset, receivedNotificationsTopic, enableAutoCommit string,
-	kp *messaging.KafkaProducer, outstandingNotificationsProducer *messaging.KafkaProducer, persistence *storage.CRDBPersistence, maxRoutines int) *InternalService {
+	kp *messaging.KafkaProducer, outstandingNotificationsProducer *messaging.KafkaProducer, persistence *storage.CRDBPersistence, maxRoutines int) (*InternalService, error) {
 	c, err := kafka.NewConsumer(&kafka.ConfigMap{
 		"bootstrap.servers":  bootstrapServers,
 		"group.id":           receivedNotificationsGroupID,
 		"auto.offset.reset":  resetOffset,
 		"enable.auto.commit": enableAutoCommit})
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 	err = c.Subscribe(receivedNotificationsTopic, nil)
-
+	if err != nil {
+		return nil, err
+	}
 	is := &InternalService{
 		kp:                               kp,
 		consumer:                         c,
@@ -46,7 +48,7 @@ func NewInternalService(bootstrapServers, receivedNotificationsGroupID, resetOff
 		maxRoutines:                      maxRoutines,
 	}
 	is.consumeNotificationInternal()
-	return is
+	return is, nil
 }
 
 func (s *InternalService) PushNotificationInternal(n *Request) error {
@@ -102,10 +104,13 @@ func (s *InternalService) consumeNotificationInternal() {
 						return
 					}
 					_, err = s.consumer.CommitMessage(e)
+					if err != nil {
+						log.Err(err).Msg("could not commit message")
+						return
+					}
 				}()
 			case kafka.Error:
-				// maybe fatal here?
-				// its unrecoverable
+				log.Err(e).Msg("kafka produced an error in outstanding service")
 			default:
 			}
 		}

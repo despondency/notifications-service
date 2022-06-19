@@ -83,16 +83,23 @@ func main() {
 		log.Panic().Err(err).Msg("cannot create kafka internal consumer")
 	}
 
-	is := notification.NewInternalService(cfg.BootstrapServers, cfg.InternalGroupID, "earliest",
+	is, err := notification.NewInternalService(cfg.BootstrapServers, cfg.InternalGroupID, "earliest",
 		cfg.InternalTopic, "false",
 		internalKafkaProducer, outstandingKafkaProducer, pers, cfg.MaxReceivingRoutines)
+	if err != nil {
+		log.Panic().Err(err).Msg("cannot create internal service")
+	}
 
 	notifiers := &notification.DelegatingNotificator{
 		Notificators: []notification.Notificator{&notification.SMSNotificator{}, &notification.EmailNotificator{}, &notification.SlackNotificator{}},
 	}
 
-	ous := notification.NewOutstandingService(cfg.BootstrapServers, cfg.OutstandingGroupID, "earliest",
+	ous, err := notification.NewOutstandingService(cfg.BootstrapServers, cfg.OutstandingGroupID, "earliest",
 		"true", cfg.OutstandingTopic, pers, notifiers, cfg.MaxOutstandingRoutines)
+
+	if err != nil {
+		log.Panic().Err(err).Msg("cannot create outstanding service")
+	}
 
 	zerolog.TimeFieldFormat = zerolog.TimeFormatUnix
 
