@@ -3,7 +3,7 @@ package notifications_test
 import (
 	"context"
 	"github.com/caarlos0/env/v6"
-	"github.com/despondency/notifications-service/internal/storage"
+	"github.com/despondency/notifications-service/internal/notification"
 	"github.com/despondency/notifications-service/test"
 	"github.com/jackc/pgx/v4/pgxpool"
 	. "github.com/onsi/ginkgo/v2"
@@ -20,7 +20,7 @@ func TestIntegration(t *testing.T) {
 var (
 	cfg      *test.Config
 	connPool *pgxpool.Pool
-	store    *storage.CRDBPersistence
+	store    *notification.CRDBPersistence
 )
 
 var _ = BeforeSuite(func() {

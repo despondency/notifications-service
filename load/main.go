@@ -15,13 +15,13 @@ import (
 )
 
 const (
-	numberOfNotifications   = 50_000
+	numberOfNotifications   = 100_000
 	numberOfPushingRoutines = 500
 )
 
 var client = &http.Client{Transport: &http.Transport{
 	TLSClientConfig:     &tls.Config{},
-	MaxIdleConnsPerHost: 250,
+	MaxIdleConnsPerHost: 750,
 }, Timeout: 60 * time.Second}
 
 func main() {

@@ -17,13 +17,6 @@ const (
 
 var ErrNoSuchDestination = fmt.Errorf("no such destination exists")
 
-type Status int8
-
-const (
-	NOT_PROCESSED Status = iota
-	PROCESSED
-)
-
 func toServerNotificationDestination(destination string) (Destination, error) {
 	destinationUpper := strings.ToUpper(destination)
 	switch destinationUpper {
@@ -38,7 +31,7 @@ func toServerNotificationDestination(destination string) (Destination, error) {
 	}
 }
 
-type ServerNotification struct {
+type Notification struct {
 	UUID                    uuid.UUID   `json:"uuid"`
 	ServerReceivedTimestamp time.Time   `json:"server_received_timestamp"`
 	NotificationTxt         string      `json:"txt"`

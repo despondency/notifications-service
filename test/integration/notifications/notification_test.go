@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"github.com/cockroachdb/cockroach-go/v2/crdb/crdbpgx"
 	"github.com/despondency/notifications-service/internal/notification"
-	"github.com/despondency/notifications-service/internal/storage"
 	_ "github.com/golang-migrate/migrate/v4/database/cockroachdb"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 	"github.com/google/uuid"
@@ -93,10 +92,10 @@ var _ = Describe("Push NotificationRequest Test", func() {
 })
 
 func CheckNotifications() bool {
-	storedNotifications := make([]*storage.Notification, len(notifications))
+	storedNotifications := make([]*notification.Notification, len(notifications))
 	for i, n := range notifications {
 		ctx := context.Background()
-		var storedNotification *storage.Notification
+		var storedNotification *notification.Notification
 		err := crdbpgx.ExecuteTx(ctx, connPool, pgx.TxOptions{}, func(tx pgx.Tx) error {
 			var errGet error
 			storedNotification, errGet = store.Get(ctx, uuid.MustParse(n.UUID), tx)
@@ -107,9 +106,6 @@ func CheckNotifications() bool {
 		} else if err != nil && err.Error() != "no rows in result set" {
 			// this deserves a panic
 			panic(err)
-		}
-		if storedNotification.Status.Int != int16(notification.PROCESSED) {
-			return false
 		}
 		storedNotifications[i] = storedNotification
 	}

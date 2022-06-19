@@ -7,7 +7,6 @@ import (
 	"github.com/cenkalti/backoff/v4"
 	"github.com/despondency/notifications-service/internal/messaging"
 	"github.com/despondency/notifications-service/internal/notification"
-	"github.com/despondency/notifications-service/internal/storage"
 	"github.com/golang-migrate/migrate/v4"
 	_ "github.com/golang-migrate/migrate/v4/database/cockroachdb"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
@@ -26,16 +25,13 @@ type Config struct {
 	KafkaConfig
 	DBConfig
 	Port                   int `env:"PORT" envDefault:"8090"`
-	MaxOutstandingRoutines int `env:"MAX_OUTSTANDING_ROUTINES" envDefault:"50"`
-	MaxReceivingRoutines   int `env:"MAX_RECEIVING_ROUTINES" envDefault:"50"`
+	MaxOutstandingRoutines int `env:"MAX_OUTSTANDING_ROUTINES" envDefault:"100"`
 }
 
 type KafkaConfig struct {
 	BootstrapServers   string `env:"KAFKA_BOOTSTRAP_SERVERS"`
 	OutstandingGroupID string `env:"OUTSTANDING_GROUP_ID"`
 	OutstandingTopic   string `env:"OUTSTANDING_TOPIC"`
-	InternalGroupID    string `env:"INTERNAL_GROUP_ID"`
-	InternalTopic      string `env:"INTERNAL_TOPIC"`
 }
 
 type DBConfig struct {
@@ -69,23 +65,15 @@ func main() {
 	connPool.Config().MaxConnLifetime = time.Second * 60
 	connPool.Config().MinConns = 0
 
-	pers := storage.NewCRDBPersistence(connPool)
+	pers := notification.NewCRDBPersistence(connPool)
 
-	internalKafkaProducer, err :=
-		messaging.NewKafkaProducer(cfg.BootstrapServers, cfg.InternalTopic, "notifications-notifications", "all")
+	outstandingKafkaProducer, err :=
+		messaging.NewKafkaProducer(cfg.BootstrapServers, cfg.OutstandingTopic, "notifications-notifications", "all")
 	if err != nil {
 		log.Panic().Err(err).Msg("cannot create kafka internal producer")
 	}
 
-	outstandingKafkaProducer, err :=
-		messaging.NewKafkaProducer(cfg.BootstrapServers, cfg.OutstandingTopic, "notifications-notifications", "1")
-	if err != nil {
-		log.Panic().Err(err).Msg("cannot create kafka internal consumer")
-	}
-
-	is, err := notification.NewInternalService(cfg.BootstrapServers, cfg.InternalGroupID, "earliest",
-		cfg.InternalTopic, "false",
-		internalKafkaProducer, outstandingKafkaProducer, pers, cfg.MaxReceivingRoutines)
+	is, err := notification.NewInternalService(outstandingKafkaProducer, pers)
 	if err != nil {
 		log.Panic().Err(err).Msg("cannot create internal service")
 	}
@@ -95,7 +83,7 @@ func main() {
 	}
 
 	ous, err := notification.NewOutstandingService(cfg.BootstrapServers, cfg.OutstandingGroupID, "earliest",
-		"true", cfg.OutstandingTopic, pers, notifiers, cfg.MaxOutstandingRoutines)
+		"false", cfg.OutstandingTopic, pers, notifiers, cfg.MaxOutstandingRoutines)
 
 	if err != nil {
 		log.Panic().Err(err).Msg("cannot create outstanding service")
@@ -123,8 +111,6 @@ func main() {
 			// Error from closing listeners, or context timeout:
 			log.Printf("HTTP server Shutdown: %v", err)
 		}
-		is.Stop()
-		internalKafkaProducer.Stop()
 		ous.Stop()
 		connPool.Close()
 		close(wait)

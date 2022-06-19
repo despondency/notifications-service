@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/cenkalti/backoff/v4"
-	"github.com/despondency/notifications-service/internal/storage"
+	"github.com/despondency/notifications-service/internal/notification"
 	"github.com/golang-migrate/migrate/v4"
 	_ "github.com/golang-migrate/migrate/v4/database/cockroachdb"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
@@ -14,7 +14,7 @@ import (
 	"time"
 )
 
-func SetupDatabase(cfg *Config, ctx context.Context) (*pgxpool.Pool, *storage.CRDBPersistence) {
+func SetupDatabase(cfg *Config, ctx context.Context) (*pgxpool.Pool, *notification.CRDBPersistence) {
 	var connPool *pgxpool.Pool
 	err := backoff.Retry(func() error {
 		var err error
@@ -33,7 +33,7 @@ func SetupDatabase(cfg *Config, ctx context.Context) (*pgxpool.Pool, *storage.CR
 
 	runMigrations(cfg.DBConnectString, cfg.MigrationsPath)
 
-	store := storage.NewCRDBPersistence(connPool)
+	store := notification.NewCRDBPersistence(connPool)
 	return connPool, store
 }
 

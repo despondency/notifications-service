@@ -5,8 +5,6 @@ import (
 	"encoding/json"
 	"github.com/cockroachdb/cockroach-go/v2/crdb/crdbpgx"
 	"github.com/confluentinc/confluent-kafka-go/kafka"
-	"github.com/despondency/notifications-service/internal/storage"
-	"github.com/jackc/pgtype"
 	"github.com/jackc/pgx/v4"
 	"github.com/rs/zerolog/log"
 	"go.uber.org/atomic"
@@ -15,13 +13,13 @@ import (
 type OutstandingService struct {
 	notificator *DelegatingNotificator
 	consumer    *kafka.Consumer
-	persistence *storage.CRDBPersistence
+	persistence *CRDBPersistence
 	stopped     *atomic.Bool
 	maxRoutines int
 }
 
 func NewOutstandingService(
-	bootstrapServers, outstandingGroupID, autoResetOffset, enableAutoCommit, outstandingNotificationsTopic string, persistence *storage.CRDBPersistence,
+	bootstrapServers, outstandingGroupID, autoResetOffset, enableAutoCommit, outstandingNotificationsTopic string, persistence *CRDBPersistence,
 	notificator *DelegatingNotificator, maxRoutines int) (*OutstandingService, error) {
 	consumer, err := kafka.NewConsumer(&kafka.ConfigMap{
 		"bootstrap.servers":  bootstrapServers,
@@ -70,21 +68,10 @@ func (ous *OutstandingService) consumeNotificationOutstanding() {
 					defer func() {
 						<-maxReq
 					}()
-					var outstandingNotification OutstandingNotification
-					err := json.Unmarshal(e.Value, &outstandingNotification)
+					err := ous.handleMsg(ctx, e)
 					if err != nil {
-						log.Err(err).Msg("cannot consume internal notification")
+						log.Err(err).Msg("could not handle msg in outstanding service")
 						return
-					} else {
-						err = ous.handleMsg(ctx, outstandingNotification)
-						if err != nil {
-							return
-						}
-						_, errCommitMsg := ous.consumer.CommitMessage(e)
-						if errCommitMsg != nil {
-							log.Err(errCommitMsg).Msg("could not commit outstanding notification msg")
-							return
-						}
 					}
 				}()
 			case kafka.Error:
@@ -95,27 +82,38 @@ func (ous *OutstandingService) consumeNotificationOutstanding() {
 	}()
 }
 
-func (ous *OutstandingService) handleMsg(ctx context.Context, outstandingNotification OutstandingNotification) error {
+func (ous *OutstandingService) handleMsg(ctx context.Context, msg *kafka.Message) error {
+	var serverNotification *Notification
+	errUnmarshall := json.Unmarshal(msg.Value, &serverNotification)
+	if errUnmarshall != nil {
+		return errUnmarshall
+	}
 	err := crdbpgx.ExecuteTx(ctx, ous.persistence.GetPool(), pgx.TxOptions{}, func(tx pgx.Tx) error {
-		sv, err := ous.persistence.GetForUpdate(ctx, outstandingNotification.UUID, tx)
+		affected, err := ous.persistence.InsertOnConflictNothing(ctx, serverNotification, tx)
 		if err != nil {
 			return err
 		}
-		if sv.Status.Int == int16(NOT_PROCESSED) {
-			errSend := ous.notificator.DelegateNotification(&DelegatingNotification{
-				uuid: sv.UUID,
-				txt:  sv.Txt,
-				dest: Destination(sv.Dest.Int),
+		if affected == 1 {
+			// it's a new notification
+			// delegate it
+			// on err the ExecuteTx will rollback, and retry later from the log because we won't commit the msg
+			err = ous.notificator.DelegateNotification(&DelegatingNotification{
+				uuid: serverNotification.UUID,
+				txt:  serverNotification.NotificationTxt,
+				dest: serverNotification.Dest,
 			})
-			if errSend != nil {
-				return err
+			if err != nil {
+				return err // this is non retryable so we will rollback
 			}
-			return ous.persistence.UpdateStatus(ctx, outstandingNotification.UUID, pgtype.Int2{
-				Int:    int16(PROCESSED),
-				Status: pgtype.Present,
-			}, tx)
 		}
 		return nil
 	})
+	// if there is no error, commit the msg
+	if err == nil {
+		_, err = ous.consumer.CommitMessage(msg)
+		if err != nil {
+			log.Err(err).Msg("failed to commit outstanding message")
+		}
+	}
 	return err
 }
